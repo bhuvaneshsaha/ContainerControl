@@ -8,6 +8,8 @@ public sealed record CreateUserResponse(Guid Id);
 
 public sealed record CurrentUserPermissionsResponse(IReadOnlyList<string> Permissions);
 
+public sealed record SessionResponse(bool SignedIn, IReadOnlyList<string> Permissions);
+
 public sealed record PermissionCatalogItem(string Code, string DisplayName, string Module, string Description);
 
 public sealed record PermissionCatalogResponse(IReadOnlyList<PermissionCatalogItem> Permissions);

@@ -6,6 +6,7 @@ import { environment } from '../../environments/environment';
 import { AuthService } from './auth';
 import { credentialsInterceptor } from './credentials-interceptor';
 import { PermissionService } from './permissions';
+import { xsrfInterceptor } from './xsrf-interceptor';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -14,7 +15,7 @@ describe('AuthService', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({
       providers: [
-        provideHttpClient(withInterceptors([credentialsInterceptor])),
+        provideHttpClient(withInterceptors([credentialsInterceptor, xsrfInterceptor])),
         provideHttpClientTesting(),
       ],
     });
@@ -31,14 +32,15 @@ describe('AuthService', () => {
 
     const csrf = await nextRequest(`${environment.apiUrl}/auth/csrf`);
     expect(csrf.request.withCredentials).toBe(true);
-    csrf.flush(null);
+    csrf.flush(null, { headers: { 'X-XSRF-TOKEN': 'token-1' } });
 
     const login = await nextRequest(`${environment.apiUrl}/auth/login`);
     expect(login.request.withCredentials).toBe(true);
+    expect(login.request.headers.get('X-XSRF-TOKEN')).toBe('token-1');
     login.flush(null);
 
-    const permissions = await nextRequest(`${environment.apiUrl}/me/permissions`);
-    permissions.flush({ permissions: ['apps.read'] });
+    const session = await nextRequest(`${environment.apiUrl}/auth/session`);
+    session.flush({ signedIn: true, permissions: ['apps.read'] });
 
     await pending;
 

@@ -17,7 +17,7 @@ describe('App', () => {
   it('shows the product name and hides host navigation without that permission', async () => {
     const fixture = TestBed.createComponent(App);
     const http = TestBed.inject(HttpTestingController);
-    http.expectOne(`${environment.apiUrl}/me/permissions`).flush({ permissions: ['apps.read'] });
+    http.expectOne(`${environment.apiUrl}/auth/session`).flush({ signedIn: true, permissions: ['apps.read'] });
     await fixture.whenStable();
     fixture.detectChanges();
 

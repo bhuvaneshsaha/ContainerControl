@@ -5,13 +5,14 @@ import { provideRouter } from '@angular/router';
 import { routes } from './app.routes';
 import { correlationInterceptor } from './core/correlation-interceptor';
 import { credentialsInterceptor } from './core/credentials-interceptor';
+import { xsrfInterceptor } from './core/xsrf-interceptor';
 
 export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
     provideRouter(routes),
     provideHttpClient(
-      withInterceptors([credentialsInterceptor, correlationInterceptor]),
+      withInterceptors([credentialsInterceptor, xsrfInterceptor, correlationInterceptor]),
       withXsrfConfiguration({
         cookieName: 'XSRF-TOKEN',
         headerName: 'X-XSRF-TOKEN',

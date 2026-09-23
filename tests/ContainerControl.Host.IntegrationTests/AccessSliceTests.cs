@@ -47,6 +47,12 @@ public sealed class AccessSliceTests
         var permissions = await client.ReadPermissionsAsync();
         Assert.Contains(PermissionCatalog.AppsRead, permissions);
 
+        var session = await client.GetAsync("/auth/session");
+        var sessionBody = await session.Content.ReadAsStringAsync();
+        Assert.Equal(HttpStatusCode.OK, session.StatusCode);
+        Assert.Contains("\"signedIn\":true", sessionBody, StringComparison.Ordinal);
+        Assert.Contains(PermissionCatalog.AppsRead, sessionBody, StringComparison.Ordinal);
+
         var rejected = await client.SendAsync(
             HttpMethod.Post,
             "/auth/login",
@@ -71,6 +77,11 @@ public sealed class AccessSliceTests
 
         var anonymous = await client.GetAsync("/me/permissions");
         Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
+
+        var session = await client.GetAsync("/auth/session");
+        var sessionBody = await session.Content.ReadAsStringAsync();
+        Assert.Equal(HttpStatusCode.OK, session.StatusCode);
+        Assert.Contains("\"signedIn\":false", sessionBody, StringComparison.Ordinal);
     }
 
     [Fact]

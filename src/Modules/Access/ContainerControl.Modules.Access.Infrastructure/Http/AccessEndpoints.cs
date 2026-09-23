@@ -42,6 +42,21 @@ public static class AccessEndpoints
             .WithTags("Access")
             .WithSummary("Issues the cookie anti-forgery token used by the browser.");
 
+        endpoints.MapGet("/auth/session", (ClaimsPrincipal principal) =>
+            {
+                if (principal.Identity?.IsAuthenticated != true)
+                {
+                    return Results.Ok(new SessionResponse(false, []));
+                }
+
+                return Results.Ok(new SessionResponse(true, ReadPermissions(principal)));
+            })
+            .AllowAnonymous()
+            .WithName("GetSession")
+            .WithTags("Access")
+            .WithSummary("Returns whether the browser cookie is signed in, without challenging an anonymous caller.")
+            .Produces<SessionResponse>();
+
         endpoints.MapPost("/auth/login", async (
                 LoginRequest? request,
                 SignInService signIn,
@@ -85,15 +100,7 @@ public static class AccessEndpoints
             .Produces(StatusCodes.Status401Unauthorized);
 
         endpoints.MapGet("/me/permissions", (ClaimsPrincipal principal) =>
-            {
-                var permissions = principal
-                    .FindAll(PermissionPolicy.ClaimType)
-                    .Select(claim => claim.Value)
-                    .Distinct(StringComparer.Ordinal)
-                    .OrderBy(code => code, StringComparer.Ordinal)
-                    .ToArray();
-                return Results.Ok(new CurrentUserPermissionsResponse(permissions));
-            })
+                Results.Ok(new CurrentUserPermissionsResponse(ReadPermissions(principal))))
             .RequireAuthorization()
             .WithName("GetMyPermissions")
             .WithTags("Access")
@@ -289,6 +296,14 @@ public static class AccessEndpoints
 
         return endpoints;
     }
+
+    private static string[] ReadPermissions(ClaimsPrincipal principal) =>
+        principal
+            .FindAll(PermissionPolicy.ClaimType)
+            .Select(claim => claim.Value)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(code => code, StringComparer.Ordinal)
+            .ToArray();
 
     private static IResult ToRoleResult(RoleWriteResult result, bool created)
     {

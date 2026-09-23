@@ -6,12 +6,13 @@ import { PermissionService } from './permissions';
 
 export const authGuard: CanActivateFn = async () => {
   const auth = inject(AuthService);
+  const router = inject(Router);
   if (auth.signedIn()) {
     return true;
   }
 
   const restored = await auth.restore();
-  return restored ? true : inject(Router).createUrlTree(['/sign-in']);
+  return restored ? true : router.createUrlTree(['/sign-in']);
 };
 
 export function permissionGuard(permission: string): CanActivateFn {
