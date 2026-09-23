@@ -1,0 +1,14 @@
+<h1>Hosts</h1>
+@if (status() === 'loading') {
+  <p>Loading Docker hosts.</p>
+} @else if (status() === 'error') {
+  <p>Docker hosts could not be loaded.</p>
+} @else if (hosts().length === 0) {
+  <p>No Docker hosts are registered yet.</p>
+} @else {
+  <ul>
+    @for (host of hosts(); track host.id) {
+      <li>{{ host.name }}</li>
+    }
+  </ul>
+}

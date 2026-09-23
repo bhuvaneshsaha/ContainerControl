@@ -1,0 +1,14 @@
+<h1>Permissions</h1>
+@if (status() === 'loading') {
+  <p>Loading permissions.</p>
+} @else if (status() === 'error') {
+  <p>Permissions could not be loaded.</p>
+} @else if (permissions().length === 0) {
+  <p>This account has no permissions.</p>
+} @else {
+  <ul>
+    @for (code of permissions(); track code) {
+      <li>{{ code }}</li>
+    }
+  </ul>
+}

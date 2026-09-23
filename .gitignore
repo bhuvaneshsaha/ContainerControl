@@ -1,0 +1,11 @@
+bin/
+obj/
+.vs/
+*.user
+*.suo
+TestResults/
+.idea/
+.DS_Store
+*.log
+client/dist/
+client/.angular/

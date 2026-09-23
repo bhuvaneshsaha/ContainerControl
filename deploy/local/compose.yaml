@@ -1,0 +1,46 @@
+# Local control-plane dependencies.
+# scripts/dev-setup starts only postgres.
+# infisical, traefik, and otel-collector stay behind profiles and are not started in this slice.
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: containercontrol
+      POSTGRES_PASSWORD: containercontrol
+      POSTGRES_DB: containercontrol
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U containercontrol -d containercontrol"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    volumes:
+      - containercontrol-postgres:/var/lib/postgresql/data
+
+  infisical:
+    profiles: ["infisical"]
+    image: infisical/infisical:latest
+    restart: "no"
+
+  traefik:
+    profiles: ["traefik"]
+    image: traefik:v3.6
+    command:
+      - "--api.insecure=false"
+      - "--providers.docker=false"
+    restart: "no"
+
+  otel-collector:
+    profiles: ["observability"]
+    image: otel/opentelemetry-collector:0.128.0
+    command: ["--config=/etc/otel/config.yaml"]
+    volumes:
+      - ./otel-collector.yaml:/etc/otel/config.yaml:ro
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+
+volumes:
+  containercontrol-postgres:

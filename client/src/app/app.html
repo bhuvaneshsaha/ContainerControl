@@ -1,0 +1,13 @@
+<header class="shell-header">
+  <p class="product">ContainerControl</p>
+  @if (signedIn()) {
+    <nav aria-label="Primary">
+      <a routerLink="/permissions">Permissions</a>
+      <a *appHasPermission="'platform.hosts.manage'" routerLink="/hosts">Hosts</a>
+    </nav>
+    <button type="button" (click)="signOut()">Sign out</button>
+  }
+</header>
+<main>
+  <router-outlet />
+</main>
