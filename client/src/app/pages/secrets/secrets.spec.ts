@@ -26,7 +26,7 @@ describe('Secrets', () => {
     fixture.componentInstance.form.controls.teamId.setValue('team-1');
     fixture.componentInstance.form.controls.name.setValue('db-password');
     fixture.componentInstance.form.controls.value.setValue('super-secret-value');
-    await fixture.componentInstance.save();
+    const pending = fixture.componentInstance.save();
     const save = http.expectOne(`${environment.apiUrl}/secrets`);
     expect(save.request.body.value).toBe('super-secret-value');
     save.flush('', { status: 204, statusText: 'No Content' });
@@ -34,6 +34,7 @@ describe('Secrets', () => {
     list.flush({
       secrets: [{ id: '1', name: 'db-password', environment: 'dev', injectionMode: 'env', path: '/teams/team-1/db-password' }],
     });
+    await pending;
     await fixture.whenStable();
     fixture.detectChanges();
 

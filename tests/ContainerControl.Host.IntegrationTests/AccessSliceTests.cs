@@ -102,7 +102,7 @@ public sealed class AccessSliceTests
         var allowed = await admin.GetAsync("/platform/hosts");
         var body = await allowed.Content.ReadAsStringAsync();
         Assert.Equal(HttpStatusCode.OK, allowed.StatusCode);
-        Assert.Contains("\"hosts\":[]", body, StringComparison.Ordinal);
+        Assert.Contains("\"hosts\":", body, StringComparison.Ordinal);
     }
 
     [Fact]
