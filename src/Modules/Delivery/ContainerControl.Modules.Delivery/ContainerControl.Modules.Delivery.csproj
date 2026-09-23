@@ -13,6 +13,10 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\Shared\ContainerControl.SharedKernel\ContainerControl.SharedKernel.csproj" />
+    <ProjectReference Include="..\..\Platform\ContainerControl.Modules.Platform\ContainerControl.Modules.Platform.csproj" />
+    <ProjectReference Include="..\..\Applications\ContainerControl.Modules.Applications\ContainerControl.Modules.Applications.csproj" />
+    <ProjectReference Include="..\..\Edge\ContainerControl.Modules.Edge\ContainerControl.Modules.Edge.csproj" />
+    <ProjectReference Include="..\..\Access\ContainerControl.Modules.Access.Application\ContainerControl.Modules.Access.Application.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -21,6 +25,7 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+    <PackageReference Include="YamlDotNet" Version="16.3.0" />
   </ItemGroup>
 
 </Project>

@@ -1,3 +1,4 @@
+using ContainerControl.Modules.Edge.Domains;
 using ContainerControl.Modules.Edge.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -6,7 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace ContainerControl.Modules.Edge;
 
 /// <summary>
-/// Traefik labels and allowed domains. No routing in this slice.
+/// Allowed domains and the Traefik container on the edge network.
 /// </summary>
 public static class EdgeModule
 {
@@ -26,6 +27,8 @@ public static class EdgeModule
                 npgsql.MigrationsHistoryTable("__EFMigrationsHistory", SchemaName);
                 npgsql.MigrationsAssembly(typeof(EdgeDbContext).Assembly.GetName().Name);
             }));
+        services.AddScoped<EdgeGateway>();
+        services.AddScoped<IEdgeGateway>(provider => provider.GetRequiredService<EdgeGateway>());
         return services;
     }
 }

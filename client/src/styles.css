@@ -18,10 +18,16 @@ label {
   margin-top: 0.75rem;
 }
 
-input {
+input,
+select,
+textarea {
   display: block;
   margin-top: 0.25rem;
   min-width: 16rem;
+}
+
+textarea {
+  min-height: 8rem;
 }
 
 button,

@@ -13,6 +13,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\Shared\ContainerControl.SharedKernel\ContainerControl.SharedKernel.csproj" />
+    <ProjectReference Include="..\..\Access\ContainerControl.Modules.Access.Application\ContainerControl.Modules.Access.Application.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -2,7 +2,7 @@
 
 Self-service on-premises container control plane. Developers never receive VM or Docker socket access. This repository is the control plane: one ASP.NET Core host, one PostgreSQL database, and an online-only Angular app.
 
-This slice signs users in with an HTTP-only cookie, stores permission roles, and shows the signed-in user's permission codes. Docker Engine, Infisical, Traefik, and deploys are later slices. Decisions are recorded under [docs/adr](docs/adr).
+Sign-in, permission checks, Docker host registration, secret references, deploys, Traefik labels, logs, and the CI webhook are in place. Decisions are recorded under [docs/adr](docs/adr).
 
 ## Local setup
 
@@ -29,6 +29,15 @@ The API listens on `http://localhost:5080`. The SPA listens on `http://localhost
 
 The Development connection string is in `src/Host/appsettings.Development.json`. It matches the Compose PostgreSQL user and database. That password is local sample configuration, not a production secret.
 
+Infisical and Traefik stay behind Compose profiles until you ask for them. The API can also create the `edge` network and the Traefik container when an admin prepares a Docker host. Do not start the Traefik profile and prepare the same host at the same time; both want ports 80 and 443 and the name `cc-traefik`.
+
+```bash
+./scripts/dev-setup.sh --profile infisical
+./scripts/dev-setup.sh --profile traefik
+```
+
+The Infisical profile uses local sample credentials in `deploy/local/compose.yaml`. They are not production secrets. Creating the machine identity is still a manual step. Set the environment variables below before saving a secret.
+
 ### Development sample users
 
 Created only when `ASPNETCORE_ENVIRONMENT` is `Development`. Do not use these accounts in production.
@@ -51,15 +60,34 @@ When the database has no users, startup creates one administrator from host envi
 | `CONTAINERCONTROL_ADMIN_DISPLAY_NAME` | Optional display name. Default is Administrator |
 | `ConnectionStrings__Database` | PostgreSQL connection string |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP endpoint. Default `http://localhost:4317` |
-| `Cors:AllowedOrigins` | SPA origin. Default `http://localhost:4200` (config key, not an environment variable name of its own; override with `Cors__AllowedOrigins__0`) |
+| `Cors__AllowedOrigins__0` | SPA origin. Default `http://localhost:4200` |
+| `INFISICAL_SITE_URL` | Infisical site URL |
+| `INFISICAL_DEV_CLIENT_ID` | Dev machine-identity client id |
+| `INFISICAL_DEV_CLIENT_SECRET` | Dev machine-identity client secret |
+| `INFISICAL_DEV_PROJECT_ID` | Dev Infisical project id |
+| `INFISICAL_STAGING_CLIENT_ID` | Staging machine-identity client id |
+| `INFISICAL_STAGING_CLIENT_SECRET` | Staging machine-identity client secret |
+| `INFISICAL_STAGING_PROJECT_ID` | Staging Infisical project id |
+| `INFISICAL_PROD_CLIENT_ID` | Prod machine-identity client id |
+| `INFISICAL_PROD_CLIENT_SECRET` | Prod machine-identity client secret |
+| `INFISICAL_PROD_PROJECT_ID` | Prod Infisical project id |
+| `EDGE_ACME_EMAIL` | Optional Let's Encrypt account email |
+| `EDGE_HTTP_PORT` | Host port published for Traefik HTTP. Default `80` |
+| `EDGE_HTTPS_PORT` | Host port published for Traefik HTTPS. Default `443` |
+| `SECRETS_FILE_ROOT` | Directory for file-injected secrets on the Docker host. Default `/tmp/containercontrol-secrets` |
 
 There is no self-registration endpoint.
 
 ## What this slice contains
 
-- Access: Identity cookie sign-in and sign-out, admin-provisioned users, teams, permission roles, the permission catalog, an API token table placeholder, a break-glass table placeholder, and append-only audit.
-- Platform, Registries, Applications, Delivery, Edge, and Runtime: schema placeholders. `GET /platform/hosts` requires `platform.hosts.manage` and returns an empty list.
-- Angular: sign-in form, a plain shell, and the permissions page. Nav and route guards use `hasPermission`.
+- Access: Identity cookie sign-in and sign-out, admin-provisioned users, teams, permission roles, the permission catalog, API token issuance, a break-glass table placeholder, and append-only audit.
+- Platform: Docker host registration and an Engine version ping. Preparing a host creates the `edge` network and the Traefik container.
+- Applications: desired state and secret references. Secret values are written to Infisical and are not stored in PostgreSQL.
+- Delivery: compose policy, deploy, start, stop, restart, rollback, and the CI webhook.
+- Edge: allowed domains and Traefik labels for an exposed hostname.
+- Runtime: log tail and container CPU and memory stats.
+- Registries: schema placeholder. Image pulls use the Engine's existing registry credentials.
+- Angular: sign-in, permissions, applications, secrets, hosts, domains, and tokens. Nav and route guards use permission codes.
 
 Permission codes are listed in [docs/permissions.md](docs/permissions.md). Module boundaries are in [docs/modules.md](docs/modules.md). Logs, traces, and health checks are in [docs/observability.md](docs/observability.md). The shared UI catalog is in [docs/components/README.md](docs/components/README.md).
 
@@ -74,4 +102,4 @@ dotnet test tests/ContainerControl.Host.IntegrationTests/ContainerControl.Host.I
 npm test --prefix client -- --watch=false
 ```
 
-Integration tests start PostgreSQL with Testcontainers and cover health, sign-in, a rejected unknown user, and permission denial on `GET /platform/hosts`.
+Integration tests start PostgreSQL with Testcontainers. They cover health, sign-in, a rejected unknown user, permission denial, Engine version ping, secret storage, deploy, app-network isolation, compose rejection, Traefik routing, logs, stats, rollback, and the deploy webhook. The secret check talks to an in-process stand-in of the Infisical v4 API. Creating a real machine identity is still manual.

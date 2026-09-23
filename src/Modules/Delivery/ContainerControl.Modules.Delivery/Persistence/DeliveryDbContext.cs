@@ -1,3 +1,4 @@
+using ContainerControl.Modules.Delivery.Runs;
 using ContainerControl.SharedKernel.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -12,6 +13,10 @@ public sealed class DeliveryDbContext : DbContext
 
     public DbSet<ModuleBoundary> Boundaries => Set<ModuleBoundary>();
 
+    public DbSet<DeploymentRecord> Deployments => Set<DeploymentRecord>();
+
+    public DbSet<WorkerLease> Leases => Set<WorkerLease>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasDefaultSchema(DeliveryModule.SchemaName);
@@ -21,6 +26,22 @@ public sealed class DeliveryDbContext : DbContext
             entity.HasKey(boundary => boundary.Id);
             entity.Property(boundary => boundary.ModuleName).HasMaxLength(64).IsRequired();
             entity.HasData(new ModuleBoundary { Id = 1, ModuleName = "Delivery" });
+        });
+        modelBuilder.Entity<DeploymentRecord>(entity =>
+        {
+            entity.ToTable("deployments");
+            entity.HasKey(deployment => deployment.Id);
+            entity.Property(deployment => deployment.Status).HasMaxLength(32).IsRequired();
+            entity.Property(deployment => deployment.Error).HasMaxLength(1000);
+            entity.Property(deployment => deployment.Hostname).HasMaxLength(253);
+            entity.HasIndex(deployment => new { deployment.ApplicationId, deployment.CreatedAtUtc });
+        });
+        modelBuilder.Entity<WorkerLease>(entity =>
+        {
+            entity.ToTable("worker_lease");
+            entity.HasKey(lease => lease.Id);
+            entity.Property<uint>("xmin").HasColumnType("xid").ValueGeneratedOnAddOrUpdate().IsConcurrencyToken();
+            entity.HasData(new WorkerLease { Id = 1 });
         });
     }
 }

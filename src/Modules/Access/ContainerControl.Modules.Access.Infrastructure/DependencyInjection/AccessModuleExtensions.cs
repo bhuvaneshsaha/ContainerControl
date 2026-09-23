@@ -8,7 +8,11 @@ using ContainerControl.Modules.Access.Infrastructure.Identity;
 using ContainerControl.Modules.Access.Infrastructure.Permissions;
 using ContainerControl.Modules.Access.Infrastructure.Persistence;
 using ContainerControl.Modules.Access.Infrastructure.Roles;
+using ContainerControl.Modules.Access.Application.Teams;
+using ContainerControl.Modules.Access.Application.Tokens;
+using ContainerControl.Modules.Access.Infrastructure.Tokens;
 using ContainerControl.Modules.Access.Infrastructure.Seeding;
+using ContainerControl.Modules.Access.Infrastructure.Teams;
 using ContainerControl.SharedKernel.Auditing;
 using ContainerControl.SharedKernel.CurrentUser;
 using Microsoft.AspNetCore.Http;
@@ -95,11 +99,15 @@ public static class AccessModuleExtensions
             .AddDefaultTokenProviders()
             .AddClaimsPrincipalFactory<PermissionClaimsPrincipalFactory>();
 
+        services.AddScoped<TeamDirectory>();
+        services.AddScoped<ITeamDirectory>(provider => provider.GetRequiredService<TeamDirectory>());
         services.AddScoped<IPermissionReader, PermissionReader>();
         services.AddScoped<IAuditSink, EfAuditSink>();
         services.AddScoped<SignInService>();
         services.AddScoped<UserAdminService>();
         services.AddScoped<RoleAdminService>();
+        services.AddScoped<TokenAdminService>();
+        services.AddScoped<IApiTokenAuthenticator>(provider => provider.GetRequiredService<TokenAdminService>());
         services.AddScoped<DevelopmentAccessSeeder>();
         services.AddScoped<FirstAdminBootstrap>();
         return services;

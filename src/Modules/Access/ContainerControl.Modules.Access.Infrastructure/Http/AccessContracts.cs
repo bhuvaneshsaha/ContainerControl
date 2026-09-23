@@ -21,3 +21,15 @@ public sealed record RoleListResponse(IReadOnlyList<RoleResponse> Roles);
 public sealed record SaveRoleRequest(string? Name, string? Description, IReadOnlyList<string>? PermissionCodes);
 
 public sealed record AssignUserRolesRequest(IReadOnlyList<Guid>? RoleIds);
+
+public sealed record TeamResponse(Guid Id, string Name);
+
+public sealed record TeamListResponse(IReadOnlyList<TeamResponse> Teams);
+
+public sealed record CreateTeamRequest(string? Name);
+
+public sealed record AddTeamMemberRequest(Guid? UserId);
+
+public sealed record IssueTokenRequest(string? Name);
+
+public sealed record IssueTokenResponse(Guid Id, string Token);

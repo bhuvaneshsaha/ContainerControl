@@ -27,9 +27,32 @@ if ($nodeVersion -notmatch "^v22\.") {
 
 & docker info | Out-Null
 & docker compose version | Out-Null
-& docker compose -f (Join-Path $root "deploy/local/compose.yaml") up -d --wait postgres
+$profiles = @()
+for ($i = 0; $i -lt $args.Count; $i++) {
+    if ($args[$i] -eq "--profile") {
+        if ($i + 1 -ge $args.Count) {
+            throw "--profile requires a name."
+        }
+        $profiles += $args[$i + 1]
+        $i++
+        continue
+    }
+    throw "Unknown argument: $($args[$i])"
+}
 
-Write-Host "PostgreSQL is ready."
+$composeFile = Join-Path $root "deploy/local/compose.yaml"
+if ($profiles.Count -eq 0) {
+    & docker compose -f $composeFile up -d --wait postgres
+    Write-Host "PostgreSQL is ready."
+    Write-Host "Infisical and Traefik profiles were not started. Pass --profile infisical or --profile traefik when that step starts."
+} else {
+    $composeArgs = @()
+    foreach ($profile in $profiles) {
+        $composeArgs += @("--profile", $profile)
+    }
+    & docker compose @composeArgs -f $composeFile up -d --wait
+    Write-Host "Compose profiles are up: $($profiles -join ', ')"
+}
+
 Write-Host "API: dotnet run --project src/Host/ContainerControl.Host.csproj"
 Write-Host "SPA: npm start --prefix client"
-Write-Host "Infisical and Traefik profiles are not started."

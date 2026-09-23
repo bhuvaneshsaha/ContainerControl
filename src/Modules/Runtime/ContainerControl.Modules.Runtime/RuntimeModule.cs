@@ -1,3 +1,4 @@
+using ContainerControl.Modules.Runtime.Inspection;
 using ContainerControl.Modules.Runtime.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -6,7 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace ContainerControl.Modules.Runtime;
 
 /// <summary>
-/// Logs, stats, and lifecycle. No Engine calls in this slice.
+/// Live logs and container stats from the Engine.
 /// </summary>
 public static class RuntimeModule
 {
@@ -26,6 +27,7 @@ public static class RuntimeModule
                 npgsql.MigrationsHistoryTable("__EFMigrationsHistory", SchemaName);
                 npgsql.MigrationsAssembly(typeof(RuntimeDbContext).Assembly.GetName().Name);
             }));
+        services.AddScoped<RuntimeInspector>();
         return services;
     }
 }

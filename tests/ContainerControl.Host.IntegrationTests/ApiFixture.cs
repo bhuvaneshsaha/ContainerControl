@@ -13,13 +13,16 @@ public sealed class ApiFixture : IAsyncLifetime
         .WithPassword("containercontrol")
         .Build();
 
+    public string ConnectionString { get; private set; } = string.Empty;
+
     public ApiFactory Factory { get; private set; } = null!;
 
     public async Task InitializeAsync()
     {
         Environment.SetEnvironmentVariable("OTEL_SDK_DISABLED", "true");
         await _postgres.StartAsync();
-        Factory = new ApiFactory(_postgres.GetConnectionString());
+        ConnectionString = _postgres.GetConnectionString();
+        Factory = new ApiFactory(ConnectionString);
         _ = Factory.CreateClient();
     }
 

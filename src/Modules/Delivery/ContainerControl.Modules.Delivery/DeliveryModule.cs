@@ -1,4 +1,5 @@
 using ContainerControl.Modules.Delivery.Persistence;
+using ContainerControl.Modules.Delivery.Runs;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -6,7 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace ContainerControl.Modules.Delivery;
 
 /// <summary>
-/// Deploy, rollback, and approval. No Engine calls in this slice.
+/// Compose policy, deploy, rollback, and the worker lease.
 /// </summary>
 public static class DeliveryModule
 {
@@ -26,6 +27,7 @@ public static class DeliveryModule
                 npgsql.MigrationsHistoryTable("__EFMigrationsHistory", SchemaName);
                 npgsql.MigrationsAssembly(typeof(DeliveryDbContext).Assembly.GetName().Name);
             }));
+        services.AddScoped<DeployService>();
         return services;
     }
 }

@@ -4,12 +4,16 @@ using ContainerControl.Modules.Access.Infrastructure.DependencyInjection;
 using ContainerControl.Modules.Access.Infrastructure.Http;
 using ContainerControl.Modules.Access.Infrastructure.Persistence;
 using ContainerControl.Modules.Applications;
+using ContainerControl.Modules.Applications.Http;
 using ContainerControl.Modules.Delivery;
+using ContainerControl.Modules.Delivery.Http;
 using ContainerControl.Modules.Edge;
+using ContainerControl.Modules.Edge.Http;
 using ContainerControl.Modules.Platform;
 using ContainerControl.Modules.Platform.Http;
 using ContainerControl.Modules.Registries;
 using ContainerControl.Modules.Runtime;
+using ContainerControl.Modules.Runtime.Http;
 using ContainerControl.SharedKernel.Correlation;
 using ContainerControl.SharedKernel.DependencyInjection;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
@@ -116,6 +120,10 @@ app.MapHealthChecks("/health/ready", new HealthCheckOptions
 
 app.MapAccessEndpoints();
 app.MapPlatformEndpoints();
+app.MapApplicationEndpoints();
+app.MapEdgeEndpoints();
+app.MapDeliveryEndpoints();
+app.MapRuntimeEndpoints();
 
 app.Run();
 

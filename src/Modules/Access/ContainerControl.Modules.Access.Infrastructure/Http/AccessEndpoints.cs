@@ -4,6 +4,8 @@ using ContainerControl.Modules.Access.Application.SignIn;
 using ContainerControl.Modules.Access.Application.Users;
 using ContainerControl.Modules.Access.Domain.Permissions;
 using ContainerControl.Modules.Access.Infrastructure.Roles;
+using ContainerControl.Modules.Access.Infrastructure.Teams;
+using ContainerControl.Modules.Access.Infrastructure.Tokens;
 using ContainerControl.SharedKernel.Authorization;
 using ContainerControl.SharedKernel.CurrentUser;
 using Microsoft.AspNetCore.Antiforgery;
@@ -279,6 +281,71 @@ public static class AccessEndpoints
             .Produces<RoleResponse>()
             .Produces(StatusCodes.Status404NotFound)
             .ProducesValidationProblem();
+
+        endpoints.MapGet("/access/teams", async (ClaimsPrincipal principal, TeamDirectory teams, CancellationToken cancellationToken) =>
+            {
+                var userId = Guid.Parse(principal.FindFirstValue(ClaimTypes.NameIdentifier)!);
+                var all = principal.HasClaim(PermissionPolicy.ClaimType, PermissionCatalog.AccessTeamsManage);
+                var list = await teams.ListForUserAsync(userId, all, cancellationToken);
+                return Results.Ok(new TeamListResponse(list.Select(team => new TeamResponse(team.Id, team.Name)).ToArray()));
+            })
+            .RequireAuthorization()
+            .WithName("ListTeams")
+            .WithTags("Access")
+            .Produces<TeamListResponse>();
+
+        endpoints.MapPost("/access/teams", async (CreateTeamRequest? request, TeamDirectory teams, CancellationToken cancellationToken) =>
+            {
+                var result = await teams.CreateAsync(request?.Name ?? string.Empty, cancellationToken);
+                if (!result.Ok || result.Id is null)
+                {
+                    return Results.ValidationProblem(new Dictionary<string, string[]> { ["team"] = [result.Error ?? "The team was not created."] });
+                }
+
+                return Results.Created($"/access/teams/{result.Id}", new TeamResponse(result.Id.Value, request!.Name!.Trim()));
+            })
+            .RequirePermission(PermissionCatalog.AccessTeamsManage)
+            .WithName("CreateTeam")
+            .WithTags("Access")
+            .Produces<TeamResponse>(StatusCodes.Status201Created);
+
+        endpoints.MapPost("/access/teams/{teamId:guid}/members", async (
+                Guid teamId,
+                AddTeamMemberRequest? request,
+                TeamDirectory teams,
+                CancellationToken cancellationToken) =>
+            {
+                if (request?.UserId is null)
+                {
+                    return Results.ValidationProblem(new Dictionary<string, string[]> { ["member"] = ["Enter a user id."] });
+                }
+
+                var added = await teams.AddMemberAsync(teamId, request.UserId.Value, cancellationToken);
+                return added ? Results.NoContent() : Results.NotFound();
+            })
+            .RequirePermission(PermissionCatalog.AccessTeamsManage)
+            .WithName("AddTeamMember")
+            .WithTags("Access");
+
+        endpoints.MapPost("/access/tokens", async (
+                ClaimsPrincipal principal,
+                IssueTokenRequest? request,
+                TokenAdminService tokens,
+                CancellationToken cancellationToken) =>
+            {
+                var userId = Guid.Parse(principal.FindFirstValue(ClaimTypes.NameIdentifier)!);
+                var result = await tokens.IssueAsync(userId, request?.Name ?? string.Empty, cancellationToken);
+                if (!result.Ok || result.Id is null || result.Plaintext is null)
+                {
+                    return Results.ValidationProblem(new Dictionary<string, string[]> { ["token"] = [result.Error ?? "The token was not issued."] });
+                }
+
+                return Results.Created($"/access/tokens/{result.Id}", new IssueTokenResponse(result.Id.Value, result.Plaintext));
+            })
+            .RequirePermission(PermissionCatalog.AccessTokensManage)
+            .WithName("IssueApiToken")
+            .WithTags("Access")
+            .Produces<IssueTokenResponse>(StatusCodes.Status201Created);
 
         endpoints.MapDelete("/access/roles/{roleId:guid}", async (
                 Guid roleId,

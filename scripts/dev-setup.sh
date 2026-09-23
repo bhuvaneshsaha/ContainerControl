@@ -29,9 +29,32 @@ fi
 docker info >/dev/null
 docker compose version >/dev/null
 
-docker compose -f "$root/deploy/local/compose.yaml" up -d --wait postgres
+profiles=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --profile)
+      profiles+=("$2")
+      shift 2
+      ;;
+    *)
+      echo "Unknown argument: $1" >&2
+      exit 1
+      ;;
+  esac
+done
 
-echo "PostgreSQL is ready."
+if [[ ${#profiles[@]} -eq 0 ]]; then
+  docker compose -f "$root/deploy/local/compose.yaml" up -d --wait postgres
+  echo "PostgreSQL is ready."
+  echo "Infisical and Traefik profiles were not started. Pass --profile infisical or --profile traefik when that step starts."
+else
+  args=()
+  for profile in "${profiles[@]}"; do
+    args+=(--profile "$profile")
+  done
+  docker compose "${args[@]}" -f "$root/deploy/local/compose.yaml" up -d --wait
+  echo "Compose profiles are up: ${profiles[*]}"
+fi
+
 echo "API: dotnet run --project src/Host/ContainerControl.Host.csproj"
 echo "SPA: npm start --prefix client"
-echo "Infisical and Traefik profiles are not started."

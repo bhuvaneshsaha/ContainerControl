@@ -1,0 +1,14 @@
+<h1>API tokens</h1>
+<p>The token is shown once. CI sends it as a bearer token to the deploy webhook.</p>
+<form [formGroup]="form" (ngSubmit)="issue()">
+  <label for="token-name">Name</label>
+  <input id="token-name" formControlName="name" />
+  <button type="submit">Issue token</button>
+</form>
+@if (message()) {
+  <p role="alert">{{ message() }}</p>
+}
+@if (token()) {
+  <p>Copy this token now. It will not be shown again.</p>
+  <pre>{{ token() }}</pre>
+}

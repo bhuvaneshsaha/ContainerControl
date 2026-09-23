@@ -1,4 +1,6 @@
 using ContainerControl.Modules.Applications.Persistence;
+using ContainerControl.Modules.Applications.Secrets;
+using ContainerControl.Modules.Applications.Workloads;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -6,7 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace ContainerControl.Modules.Applications;
 
 /// <summary>
-/// Application desired state. No app editor in this slice.
+/// Application desired state and secret references. Values go to Infisical.
 /// </summary>
 public static class ApplicationsModule
 {
@@ -26,6 +28,11 @@ public static class ApplicationsModule
                 npgsql.MigrationsHistoryTable("__EFMigrationsHistory", SchemaName);
                 npgsql.MigrationsAssembly(typeof(ApplicationsDbContext).Assembly.GetName().Name);
             }));
+        services.AddHttpClient(nameof(InfisicalSecretStore));
+        services.AddScoped<ISecretStore, InfisicalSecretStore>();
+        services.AddScoped<WorkloadAdmin>();
+        services.AddScoped<IWorkloadStore>(provider => provider.GetRequiredService<WorkloadAdmin>());
+        services.AddScoped<ISecretCatalog>(provider => provider.GetRequiredService<WorkloadAdmin>());
         return services;
     }
 }

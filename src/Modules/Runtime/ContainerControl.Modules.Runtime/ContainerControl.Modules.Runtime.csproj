@@ -13,6 +13,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\Shared\ContainerControl.SharedKernel\ContainerControl.SharedKernel.csproj" />
+    <ProjectReference Include="..\..\Platform\ContainerControl.Modules.Platform\ContainerControl.Modules.Platform.csproj" />
+    <ProjectReference Include="..\..\Applications\ContainerControl.Modules.Applications\ContainerControl.Modules.Applications.csproj" />
+    <ProjectReference Include="..\..\Access\ContainerControl.Modules.Access.Application\ContainerControl.Modules.Access.Application.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,4 +1,14 @@
 <h1>Hosts</h1>
+<form [formGroup]="form" (ngSubmit)="register()">
+  <label for="host-name">Name</label>
+  <input id="host-name" formControlName="name" />
+  <label for="host-endpoint">Engine endpoint</label>
+  <input id="host-endpoint" formControlName="endpoint" />
+  <button type="submit">Register host</button>
+</form>
+@if (message()) {
+  <p role="alert">{{ message() }}</p>
+}
 @if (status() === 'loading') {
   <p>Loading Docker hosts.</p>
 } @else if (status() === 'error') {
@@ -8,7 +18,14 @@
 } @else {
   <ul>
     @for (host of hosts(); track host.id) {
-      <li>{{ host.name }}</li>
+      <li>
+        {{ host.name }}
+        @if (host.engineVersion) {
+          <span>Engine {{ host.engineVersion }}</span>
+        }
+        <button type="button" (click)="ping(host)">Ping</button>
+        <button type="button" (click)="prepare(host)">Prepare edge</button>
+      </li>
     }
   </ul>
 }

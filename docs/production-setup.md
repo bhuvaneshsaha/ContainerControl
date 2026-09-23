@@ -12,17 +12,17 @@ Do not run `ASPNETCORE_ENVIRONMENT=Development` in production. That seed creates
 4. Install Docker Engine on the Docker host and leave it running with mutual TLS. Do not install Docker Desktop and do not publish the raw socket. Check: the Engine answers on the management VLAN.
 5. Start ContainerControl and PostgreSQL on the management VM with the production connection string in `ConnectionStrings__Database`. Check: `/health/ready` reports the database healthy.
 6. Set `CONTAINERCONTROL_ADMIN_EMAIL`, `CONTAINERCONTROL_ADMIN_PASSWORD`, and optionally `CONTAINERCONTROL_ADMIN_DISPLAY_NAME` before the first boot if the database has no users. Check: that account can sign in. The password is not stored in git.
-7. Create the Infisical machine identity after Infisical is running, and put the token in the host environment. Check: the token is present on the host and absent from git. This slice does not call Infisical.
+7. Create a separate Infisical machine identity for dev, staging, and prod. Put `INFISICAL_SITE_URL` and each environment's `INFISICAL_*_CLIENT_ID`, `INFISICAL_*_CLIENT_SECRET`, and `INFISICAL_*_PROJECT_ID` on the management host. Check: those variables are present on the host and absent from git. ContainerControl writes secret values through the Infisical API. It does not create the identity.
 8. Sign in and create real users. Assign roles built from the permission catalog. Check: a developer cannot call `GET /platform/hosts`.
-9. Register the Docker host, allowed domains, registries, and data-tier databases. These screens are later slices. Check: the production guide section for that step exists before you rely on it.
-10. Deploy one sample app on a hostname under the wildcard. Check: that verification step in the platform plan passes. It is not part of this slice.
+9. Register the Docker host and ping the Engine. Prepare the host so the `edge` network and the Traefik container exist, or start the Traefik Compose profile on that host. Do not do both against the same ports and container name. Add allowed domains that already resolve to the public IP. Registries and data-tier databases are still later work.
+10. Deploy one sample app on a hostname under an allowed domain. Check: the exposed hostname returns the app, and an unexposed service does not. Optional `EDGE_ACME_EMAIL`, `EDGE_HTTP_PORT`, and `EDGE_HTTPS_PORT` control the Traefik container created by prepare.
 
 ## Do
 
 - Keep 80 and 443 forwarded only to Traefik once that container exists.
 - Keep tenant containers on a private app network, with only the exposed service on the edge network.
 - Create every user explicitly.
-- Store secret values only through ContainerControl once that form exists.
+- Store secret values only through the ContainerControl secret form. PostgreSQL keeps the name, path, and injection mode.
 - Keep production databases on the data-tier VM.
 
 ## Do not

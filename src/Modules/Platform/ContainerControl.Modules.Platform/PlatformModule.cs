@@ -1,3 +1,5 @@
+using ContainerControl.Modules.Platform.Engine;
+using ContainerControl.Modules.Platform.Hosts;
 using ContainerControl.Modules.Platform.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -26,6 +28,9 @@ public static class PlatformModule
                 npgsql.MigrationsHistoryTable("__EFMigrationsHistory", SchemaName);
                 npgsql.MigrationsAssembly(typeof(PlatformDbContext).Assembly.GetName().Name);
             }));
+        services.AddSingleton<IDockerEngine, DockerEngineClient>();
+        services.AddScoped<HostRegistry>();
+        services.AddScoped<IDockerHostLookup>(provider => provider.GetRequiredService<HostRegistry>());
         return services;
     }
 }

@@ -8,6 +8,12 @@ public static class ApiAntiforgeryMiddleware
     {
         return app.Use(async (context, next) =>
         {
+            if (context.Request.Path.StartsWithSegments("/delivery/webhook"))
+            {
+                await next();
+                return;
+            }
+
             if (HttpMethods.IsGet(context.Request.Method)
                 || HttpMethods.IsHead(context.Request.Method)
                 || HttpMethods.IsOptions(context.Request.Method)
