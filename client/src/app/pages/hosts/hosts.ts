@@ -68,7 +68,10 @@ export class Hosts {
     this.message.set('');
     try {
       await firstValueFrom(
-        this.http.post(`${environment.apiUrl}/platform/hosts/${host.id}/prepare`, {}, { responseType: 'text' }),
+        this.http.post(`${environment.apiUrl}/platform/hosts/${host.id}/prepare`, {}, {
+          observe: 'response',
+          responseType: 'text',
+        }),
       );
       this.message.set('The edge network and Traefik container are ready.');
     } catch {

@@ -71,7 +71,10 @@ export class Secrets {
 
     try {
       await firstValueFrom(
-        this.http.post(`${environment.apiUrl}/secrets`, this.form.getRawValue(), { responseType: 'text' }),
+        this.http.post(`${environment.apiUrl}/secrets`, this.form.getRawValue(), {
+          observe: 'response',
+          responseType: 'text',
+        }),
       );
       this.form.controls.value.setValue('');
       await this.load();

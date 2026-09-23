@@ -139,6 +139,8 @@ public sealed class PlatformSliceTests
         Guid? singleId = null;
         Guid? firstApp = null;
         Guid? secondApp = null;
+        Guid? exposedId = null;
+        Guid? hiddenId = null;
         try
         {
             singleId = await CreateApp(developer, teamId, host!.Id, new
@@ -254,7 +256,7 @@ public sealed class PlatformSliceTests
 
             var prepare = await admin.SendAsync(HttpMethod.Post, $"/platform/hosts/{host.Id}/prepare");
             Assert.Equal(HttpStatusCode.NoContent, prepare.StatusCode);
-            var exposedId = await CreateApp(developer, teamId, host.Id, new
+            exposedId = await CreateApp(developer, teamId, host.Id, new
             {
                 teamId,
                 hostId = host.Id,
@@ -266,7 +268,7 @@ public sealed class PlatformSliceTests
                 exposed = true
             });
             (await developer.SendAsync(HttpMethod.Post, $"/apps/{exposedId}/deploy")).EnsureSuccessStatusCode();
-            var hiddenId = await CreateApp(developer, teamId, host.Id, new
+            hiddenId = await CreateApp(developer, teamId, host.Id, new
             {
                 teamId,
                 hostId = host.Id,
@@ -294,6 +296,14 @@ public sealed class PlatformSliceTests
             foreach (var container in containers)
             {
                 await engine.RemoveContainerAsync(new DockerEndpoint(EngineEndpoint), container.Id, CancellationToken.None);
+            }
+
+            foreach (var id in new[] { singleId, firstApp, secondApp, exposedId, hiddenId })
+            {
+                if (id is not null)
+                {
+                    await engine.RemoveNetworkAsync(new DockerEndpoint(EngineEndpoint), "cc-app-" + id.Value.ToString("N"), CancellationToken.None);
+                }
             }
         }
     }
@@ -350,6 +360,8 @@ public sealed class PlatformSliceTests
         {
             await engine.RemoveContainerAsync(new DockerEndpoint(EngineEndpoint), container.Id, CancellationToken.None);
         }
+
+        await engine.RemoveNetworkAsync(new DockerEndpoint(EngineEndpoint), "cc-app-" + appId.ToString("N"), CancellationToken.None);
     }
 
     private static async Task<string> Issue(HttpClient client)

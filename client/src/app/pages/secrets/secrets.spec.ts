@@ -30,6 +30,7 @@ describe('Secrets', () => {
     const save = http.expectOne(`${environment.apiUrl}/secrets`);
     expect(save.request.body.value).toBe('super-secret-value');
     save.flush('', { status: 204, statusText: 'No Content' });
+    await Promise.resolve();
     const list = http.expectOne(`${environment.apiUrl}/secrets?teamId=team-1&environment=dev`);
     list.flush({
       secrets: [{ id: '1', name: 'db-password', environment: 'dev', injectionMode: 'env', path: '/teams/team-1/db-password' }],

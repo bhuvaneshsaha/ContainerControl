@@ -40,10 +40,25 @@ public sealed class DockerEngineClient : IDockerEngine
             {
                 Name = name,
                 Driver = "bridge",
-                CheckDuplicate = true
+                CheckDuplicate = true,
+                IPAM = AppSubnet(name) is { } subnet
+                    ? new IPAM { Config = [new IPAMConfig { Subnet = subnet }] }
+                    : null
             }, cancellationToken);
         }
         catch (DockerApiException exception) when (exception.StatusCode == System.Net.HttpStatusCode.Conflict)
+        {
+        }
+    }
+
+    public async Task RemoveNetworkAsync(DockerEndpoint endpoint, string name, CancellationToken cancellationToken)
+    {
+        using var client = Connect(endpoint);
+        try
+        {
+            await client.Networks.DeleteNetworkAsync(name, cancellationToken);
+        }
+        catch (DockerApiException exception) when (exception.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
         }
     }
@@ -282,6 +297,24 @@ public sealed class DockerEngineClient : IDockerEngine
         }
 
         return new DockerClientConfiguration(uri).CreateClient(new System.Version(1, 44), null!);
+    }
+
+    private static string? AppSubnet(string name)
+    {
+        const string prefix = "cc-app-";
+        if (!name.StartsWith(prefix, StringComparison.Ordinal) || name.Length != prefix.Length + 32)
+        {
+            return null;
+        }
+
+        var first = Convert.ToInt32(name.Substring(prefix.Length, 2), 16);
+        var second = Convert.ToInt32(name.Substring(prefix.Length + 2, 2), 16);
+        if (first == 0 && second == 0)
+        {
+            second = 1;
+        }
+
+        return $"10.{first}.{second}.0/24";
     }
 
     private static (string FromImage, string Tag) SplitImage(string image)

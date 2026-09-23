@@ -12,4 +12,6 @@ One host, one PostgreSQL database, one schema per module. Modules do not write e
 | Edge | `edge` | Allowed domains, the `edge` network, and the Traefik container. |
 | Runtime | `runtime` | Log tail and container stats from the Engine. |
 
+Each application gets a private Docker network named `cc-app-{id}` with a `/24`. That keeps a host from exhausting Docker's default address pools. Exposed services also join `edge`.
+
 The shared kernel is the clock, current user, correlation id, audit sink, permission requirement, and problem details.

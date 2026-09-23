@@ -27,6 +27,8 @@ public interface IDockerEngine
 
     Task EnsureNetworkAsync(DockerEndpoint endpoint, string name, CancellationToken cancellationToken);
 
+    Task RemoveNetworkAsync(DockerEndpoint endpoint, string name, CancellationToken cancellationToken);
+
     Task PullImageAsync(DockerEndpoint endpoint, string image, CancellationToken cancellationToken);
 
     Task<string> CreateContainerAsync(DockerEndpoint endpoint, ContainerPlan plan, CancellationToken cancellationToken);

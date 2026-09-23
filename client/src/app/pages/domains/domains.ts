@@ -45,7 +45,10 @@ export class Domains {
 
     try {
       await firstValueFrom(
-        this.http.post(`${environment.apiUrl}/edge/domains`, this.form.getRawValue(), { responseType: 'text' }),
+        this.http.post(`${environment.apiUrl}/edge/domains`, this.form.getRawValue(), {
+          observe: 'response',
+          responseType: 'text',
+        }),
       );
       this.form.controls.name.setValue('');
       await this.load();
