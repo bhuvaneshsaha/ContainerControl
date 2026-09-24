@@ -1,0 +1,45 @@
+<h1>Registries</h1>
+<p>Pull credentials are stored in Infisical. This page does not connect to registry:2.</p>
+<form [formGroup]="form" (ngSubmit)="save()" *appHasPermission="'registries.manage'">
+  <label for="registry-name">Name</label>
+  <input id="registry-name" formControlName="name" />
+  <label for="registry-kind">Type</label>
+  <select id="registry-kind" formControlName="kind">
+    @for (kind of kinds; track kind) {
+      <option [value]="kind">{{ kind }}</option>
+    }
+  </select>
+  <label for="registry-server">Host</label>
+  <input id="registry-server" formControlName="server" />
+  <label for="registry-environment">Infisical environment</label>
+  <select id="registry-environment" formControlName="environment">
+    <option value="dev">dev</option>
+    <option value="staging">staging</option>
+    <option value="prod">prod</option>
+  </select>
+  <label for="registry-username">Username</label>
+  <input id="registry-username" formControlName="username" />
+  <label for="registry-password">Password</label>
+  <input id="registry-password" type="password" formControlName="password" />
+  <label for="registry-access-key">ECR access key id</label>
+  <input id="registry-access-key" formControlName="accessKeyId" />
+  <label for="registry-secret-key">ECR secret access key</label>
+  <input id="registry-secret-key" type="password" formControlName="secretAccessKey" />
+  <button type="submit">Save registry</button>
+</form>
+@if (message()) {
+  <p role="alert">{{ message() }}</p>
+}
+@if (status() === 'loading') {
+  <p>Loading registries.</p>
+} @else if (status() === 'error') {
+  <p>Registries could not be loaded.</p>
+} @else if (registries().length === 0) {
+  <p>No registry connections are saved yet.</p>
+} @else {
+  <ul>
+    @for (registry of registries(); track registry.id) {
+      <li>{{ registry.name }} ({{ registry.kind }}) {{ registry.server }}</li>
+    }
+  </ul>
+}

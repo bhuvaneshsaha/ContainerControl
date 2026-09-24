@@ -76,7 +76,7 @@ public sealed class EdgeGateway : IEdgeGateway
         var httpPort = _configuration["Edge:HttpPort"] ?? "80";
         var httpsPort = _configuration["Edge:HttpsPort"] ?? "443";
         var socket = SocketPath(dockerEndpoint);
-        await _engine.PullImageAsync(endpoint, image, cancellationToken);
+        await _engine.PullImageAsync(endpoint, image, null, cancellationToken);
         var command = new List<string>
         {
             "--api.insecure=false",

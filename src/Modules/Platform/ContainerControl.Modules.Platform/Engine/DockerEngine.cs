@@ -37,7 +37,7 @@ public interface IDockerEngine
 
     Task RemoveNetworkAsync(DockerEndpoint endpoint, string name, CancellationToken cancellationToken);
 
-    Task PullImageAsync(DockerEndpoint endpoint, string image, CancellationToken cancellationToken);
+    Task PullImageAsync(DockerEndpoint endpoint, string image, ImagePullAuth? auth, CancellationToken cancellationToken);
 
     Task<string> CreateContainerAsync(DockerEndpoint endpoint, ContainerPlan plan, CancellationToken cancellationToken);
 
@@ -88,5 +88,7 @@ public interface IDockerEngine
         string containerId,
         CancellationToken cancellationToken);
 }
+
+public sealed record ImagePullAuth(string Server, string Username, string Password);
 
 public sealed record ContainerSample(double CpuPercent, long MemoryBytes);

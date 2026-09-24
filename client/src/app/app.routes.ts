@@ -43,6 +43,12 @@ export const routes: Routes = [
         loadComponent: () => import('./pages/domains/domains').then((module) => module.Domains),
       },
       {
+        path: 'registries',
+        title: 'Registries',
+        canActivate: [permissionGuard('registries.read')],
+        loadComponent: () => import('./pages/registries/registries').then((module) => module.Registries),
+      },
+      {
         path: 'tokens',
         title: 'API tokens',
         canActivate: [permissionGuard('access.tokens.manage')],

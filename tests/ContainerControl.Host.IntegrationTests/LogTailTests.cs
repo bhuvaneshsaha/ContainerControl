@@ -122,7 +122,7 @@ public class LogTailTests
 
         public Task RemoveNetworkAsync(DockerEndpoint endpoint, string name, CancellationToken cancellationToken) => throw new NotSupportedException();
 
-        public Task PullImageAsync(DockerEndpoint endpoint, string image, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task PullImageAsync(DockerEndpoint endpoint, string image, ImagePullAuth? auth, CancellationToken cancellationToken) => throw new NotSupportedException();
 
         public Task<string> CreateContainerAsync(DockerEndpoint endpoint, ContainerPlan plan, CancellationToken cancellationToken) => throw new NotSupportedException();
 

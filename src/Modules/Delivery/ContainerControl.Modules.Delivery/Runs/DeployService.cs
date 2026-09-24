@@ -8,6 +8,7 @@ using ContainerControl.Modules.Delivery.Persistence;
 using ContainerControl.Modules.Edge.Domains;
 using ContainerControl.Modules.Platform.Engine;
 using ContainerControl.Modules.Platform.Hosts;
+using ContainerControl.Modules.Registries.Connections;
 using ContainerControl.SharedKernel.CurrentUser;
 using ContainerControl.SharedKernel.Time;
 using Microsoft.EntityFrameworkCore;
@@ -24,6 +25,7 @@ public sealed class DeployService
     private readonly ISecretCatalog _secretCatalog;
     private readonly ISecretStore _secretStore;
     private readonly IEdgeGateway _edge;
+    private readonly IRegistryLogin _registries;
     private readonly ITeamDirectory _teams;
     private readonly ICurrentUser _currentUser;
     private readonly IClock _clock;
@@ -37,6 +39,7 @@ public sealed class DeployService
         ISecretCatalog secretCatalog,
         ISecretStore secretStore,
         IEdgeGateway edge,
+        IRegistryLogin registries,
         ITeamDirectory teams,
         ICurrentUser currentUser,
         IClock clock,
@@ -49,6 +52,7 @@ public sealed class DeployService
         _secretCatalog = secretCatalog;
         _secretStore = secretStore;
         _edge = edge;
+        _registries = registries;
         _teams = teams;
         _currentUser = currentUser;
         _clock = clock;
@@ -258,7 +262,8 @@ public sealed class DeployService
         foreach (var service in ordered)
         {
             var image = service.Image;
-            await _engine.PullImageAsync(endpoint, image, cancellationToken);
+            var auth = await _registries.ForImageAsync(image, cancellationToken);
+            await _engine.PullImageAsync(endpoint, image, auth, cancellationToken);
             var injected = SecretInjection.Apply(service.Environment, service.Command, secretInputs);
             var exposed = service.Exposed;
             var labels = new Dictionary<string, string>

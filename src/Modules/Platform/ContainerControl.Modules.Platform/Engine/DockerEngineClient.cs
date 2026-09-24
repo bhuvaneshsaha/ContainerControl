@@ -63,13 +63,15 @@ public sealed class DockerEngineClient : IDockerEngine
         }
     }
 
-    public async Task PullImageAsync(DockerEndpoint endpoint, string image, CancellationToken cancellationToken)
+    public async Task PullImageAsync(DockerEndpoint endpoint, string image, ImagePullAuth? auth, CancellationToken cancellationToken)
     {
         var (fromImage, tag) = SplitImage(image);
         using var client = Connect(endpoint);
         await client.Images.CreateImageAsync(
             new ImagesCreateParameters { FromImage = fromImage, Tag = tag },
-            null,
+            auth is null
+                ? null
+                : new AuthConfig { Username = auth.Username, Password = auth.Password, ServerAddress = auth.Server },
             new Progress<JSONMessage>(),
             cancellationToken);
     }
