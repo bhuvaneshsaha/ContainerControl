@@ -1,6 +1,6 @@
 import { Routes } from '@angular/router';
 
-import { authGuard, permissionGuard } from './core/auth-guard';
+import { authGuard, permissionGuard, permissionGuardAny } from './core/auth-guard';
 
 export const routes: Routes = [
   {
@@ -33,7 +33,7 @@ export const routes: Routes = [
       {
         path: 'access',
         title: 'Users and teams',
-        canActivate: [permissionGuard('access.users.manage')],
+        canActivate: [permissionGuardAny(['access.users.manage', 'access.teams.manage', 'access.roles.manage', 'access.audit.read'])],
         loadComponent: () => import('./pages/access/access').then((module) => module.Access),
       },
       {

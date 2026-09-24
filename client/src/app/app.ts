@@ -2,6 +2,7 @@ import { Component, inject } from '@angular/core';
 import { Router, RouterLink, RouterOutlet } from '@angular/router';
 
 import { AuthService } from './core/auth';
+import { PermissionService } from './core/permissions';
 import { HasPermission } from './shared/has-permission';
 
 @Component({
@@ -12,9 +13,16 @@ import { HasPermission } from './shared/has-permission';
 })
 export class App {
   private readonly auth = inject(AuthService);
+  private readonly permissions = inject(PermissionService);
   private readonly router = inject(Router);
 
   readonly signedIn = this.auth.signedIn;
+
+  canOpenAccess(): boolean {
+    return ['access.users.manage', 'access.teams.manage', 'access.roles.manage', 'access.audit.read'].some((code) =>
+      this.permissions.hasPermission(code),
+    );
+  }
 
   constructor() {
     void this.auth.restore();

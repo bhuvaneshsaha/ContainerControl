@@ -104,6 +104,7 @@ public static class AccessModuleExtensions
         services.AddScoped<ITeamDirectory>(provider => provider.GetRequiredService<TeamDirectory>());
         services.AddScoped<IPermissionReader, PermissionReader>();
         services.AddScoped<IAuditSink, EfAuditSink>();
+        services.AddScoped<AuditQuery>();
         services.AddScoped<SignInService>();
         services.AddScoped<UserAdminService>();
         services.AddScoped<RoleAdminService>();

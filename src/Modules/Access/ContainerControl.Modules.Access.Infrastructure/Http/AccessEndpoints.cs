@@ -3,6 +3,7 @@ using ContainerControl.Modules.Access.Application.Permissions;
 using ContainerControl.Modules.Access.Application.SignIn;
 using ContainerControl.Modules.Access.Application.Users;
 using ContainerControl.Modules.Access.Domain.Permissions;
+using ContainerControl.Modules.Access.Infrastructure.Auditing;
 using ContainerControl.Modules.Access.Infrastructure.Roles;
 using ContainerControl.Modules.Access.Infrastructure.Teams;
 using ContainerControl.Modules.Access.Infrastructure.Tokens;
@@ -367,6 +368,18 @@ public static class AccessEndpoints
             .WithName("IssueApiToken")
             .WithTags("Access")
             .Produces<IssueTokenResponse>(StatusCodes.Status201Created);
+
+        endpoints.MapGet("/access/audit", async (AuditQuery audit, CancellationToken cancellationToken) =>
+            {
+                var entries = await audit.LatestAsync(cancellationToken);
+                return Results.Ok(new AuditListResponse(entries));
+            })
+            .RequirePermission(PermissionCatalog.AccessAuditRead)
+            .WithName("ListAudit")
+            .WithTags("Access")
+            .Produces<AuditListResponse>()
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
 
         endpoints.MapDelete("/access/roles/{roleId:guid}", async (
                 Guid roleId,

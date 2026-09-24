@@ -79,14 +79,14 @@ There is no self-registration endpoint.
 
 ## What this slice contains
 
-- Access: Identity cookie sign-in and sign-out, admin-provisioned users, teams, permission roles, the permission catalog, API token issuance, a break-glass table that is not evaluated, and append-only audit. The API does not yet list audit rows.
+- Access: Identity cookie sign-in and sign-out, admin-provisioned users, teams, permission roles, the permission catalog, API token issuance, a break-glass table that is not evaluated, and append-only audit. `GET /access/audit` lists the latest rows for `access.audit.read` and does not include secret values. The Access page creates and disables users, creates teams, edits roles from catalog checkboxes, and reads that audit.
 - Platform: Docker host registration and an Engine version ping. Preparing a host creates the `edge` network and the Traefik container. Quotas and capacity are not stored.
 - Applications: desired state and secret references. Secret values are written to Infisical and are not stored in PostgreSQL. Deploy places them in the container as environment variables, or as files under `/run/secrets`, and fills `${SECRET}` placeholders in the compose environment and command. Creating a `prod` application sets approval required. Any environment can opt in with the same flag.
 - Delivery: compose policy, deploy, start, stop, restart, rollback, and the CI webhook. `POST /apps/{id}/deploy` on an approval-required application stays `pending-approval` until a caller with `deploy.approve` calls `POST /apps/{id}/approve`. That caller does not have to be a member of the application's team. The Applications page shows Approve for a pending application when the signed-in user has that permission. A failed deploy is recorded with a short message. That message omits text that looks like a secret assignment. A compose healthcheck is applied on the container, and deploy waits for healthy before starting the services that depend on it.
 - Edge: allowed domains and Traefik labels for an exposed hostname. If prepare cannot reach the Engine, the API returns 502.
 - Runtime: a one-shot log read, a SignalR tail at `/hubs/logs` (`Tail` sends `log` events from the Engine log API), and container CPU and memory stats. The tail requires `runtime.logs.read` and team membership.
 - Registries: schema placeholder. Image pulls use the Engine's existing registry credentials.
-- Angular: sign-in, permissions, applications, secrets, hosts, domains, users and teams, and tokens. Nav and route guards use permission codes. The Applications page has no Approve action. The Users page assigns an existing role; it does not edit the catalog on a role, and it does not show audit.
+- Angular: sign-in, permissions, applications, secrets, hosts, domains, access, and tokens. Nav and route guards use permission codes. The Access page is available to `access.users.manage`, `access.teams.manage`, `access.roles.manage`, or `access.audit.read`.
 
 Permission codes are listed in [docs/permissions.md](docs/permissions.md). Module boundaries are in [docs/modules.md](docs/modules.md). Logs, traces, and health checks are in [docs/observability.md](docs/observability.md). The shared UI catalog is in [docs/components/README.md](docs/components/README.md).
 

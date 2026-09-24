@@ -4,7 +4,7 @@ One host, one PostgreSQL database, one schema per module. Modules do not write e
 
 | Module | Schema | This slice |
 | --- | --- | --- |
-| Access | `access` | Identity users, teams, permission roles, permission catalog, API token issuance, an unevaluated break-glass table, and append-only audit. Login, logout, and user create/disable. There is no audit read endpoint yet. |
+| Access | `access` | Identity users, teams, permission roles composed from the catalog, API token issuance, an unevaluated break-glass table, and append-only audit. `GET /access/audit` reads the latest rows for `access.audit.read`. |
 | Platform | `platform` | Docker host registration and Engine version ping. `GET /platform/hosts/choices` returns names for app placement. Quotas and capacity are not stored yet. |
 | Registries | `registries` | Schema placeholder. Image pulls use the Engine's default registry access. |
 | Applications | `applications` | Desired state and secret references. Values are written to Infisical. `prod` always requires approval. Other environments require it when the application opts in. |

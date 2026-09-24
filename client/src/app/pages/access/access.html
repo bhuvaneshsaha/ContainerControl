@@ -1,78 +1,141 @@
-<h1>Users and teams</h1>
+<h1>Access</h1>
 @if (message()) {
   <p role="alert">{{ message() }}</p>
 }
 @if (status() === 'loading') {
-  <p>Loading users and teams.</p>
+  <p>Loading access.</p>
 } @else if (status() === 'error') {
-  <p>Users and teams could not be loaded.</p>
+  <p>Access could not be loaded.</p>
 } @else {
-  <h2>Users</h2>
-  <form [formGroup]="userForm" (ngSubmit)="createUser()">
-    <label for="user-email">Email</label>
-    <input id="user-email" type="email" formControlName="email" />
-    <label for="user-name">Display name</label>
-    <input id="user-name" formControlName="displayName" />
-    <label for="user-password">Password</label>
-    <input id="user-password" type="password" formControlName="password" />
-    <label for="user-role">Role</label>
-    <select id="user-role" formControlName="roleId">
-      <option value="">No role yet</option>
-      @for (role of roles(); track role.id) {
-        <option [value]="role.id">{{ role.name }}</option>
+  <section *appHasPermission="'access.users.manage'">
+    <h2>Users</h2>
+    <form [formGroup]="userForm" (ngSubmit)="createUser()">
+      <label for="user-email">Email</label>
+      <input id="user-email" type="email" formControlName="email" />
+      <label for="user-name">Display name</label>
+      <input id="user-name" formControlName="displayName" />
+      <label for="user-password">Password</label>
+      <input id="user-password" type="password" formControlName="password" />
+      <label for="user-role">Role</label>
+      <select id="user-role" formControlName="roleId">
+        <option value="">No role yet</option>
+        @for (role of roles(); track role.id) {
+          <option [value]="role.id">{{ role.name }}</option>
+        }
+      </select>
+      <button type="submit">Create user</button>
+    </form>
+    @if (users().length === 0) {
+      <p>No users are provisioned yet.</p>
+    } @else {
+      <ul>
+        @for (user of users(); track user.id) {
+          <li>
+            {{ user.displayName }} ({{ user.email }})
+            @if (user.disabled) {
+              <span>Disabled</span>
+            } @else {
+              <button type="button" (click)="disable(user)">Disable</button>
+            }
+          </li>
+        }
+      </ul>
+    }
+  </section>
+
+  <section *appHasPermission="'access.teams.manage'">
+    <h2>Teams</h2>
+    <form [formGroup]="teamForm" (ngSubmit)="createTeam()">
+      <label for="team-name">Name</label>
+      <input id="team-name" formControlName="name" />
+      <button type="submit">Create team</button>
+    </form>
+    @if (teams().length === 0) {
+      <p>No teams exist yet.</p>
+    } @else {
+      <ul>
+        @for (team of teams(); track team.id) {
+          <li>{{ team.name }}</li>
+        }
+      </ul>
+    }
+    <h2>Team membership</h2>
+    <form [formGroup]="memberForm" (ngSubmit)="addMember()">
+      <label for="member-team">Team</label>
+      <select id="member-team" formControlName="teamId">
+        <option value="">Select a team</option>
+        @for (team of teams(); track team.id) {
+          <option [value]="team.id">{{ team.name }}</option>
+        }
+      </select>
+      <label for="member-user">User</label>
+      <select id="member-user" formControlName="userId">
+        <option value="">Select a user</option>
+        @for (user of users(); track user.id) {
+          <option [value]="user.id">{{ user.displayName }}</option>
+        }
+      </select>
+      <button type="submit">Add member</button>
+    </form>
+  </section>
+
+  <section *appHasPermission="'access.roles.manage'">
+    <h2>Roles</h2>
+    <form [formGroup]="roleForm" (ngSubmit)="saveRole()">
+      <label for="role-name">Name</label>
+      <input id="role-name" formControlName="name" />
+      <label for="role-description">Description</label>
+      <input id="role-description" formControlName="description" />
+      @for (permission of catalog(); track permission.code) {
+        <label [attr.for]="'perm-' + permission.code">
+          <input
+            [id]="'perm-' + permission.code"
+            type="checkbox"
+            [checked]="selectedCodes().includes(permission.code)"
+            (change)="toggleCode(permission.code)"
+          />
+          {{ permission.displayName }} ({{ permission.code }})
+        </label>
       }
-    </select>
-    <button type="submit">Create user</button>
-  </form>
-  @if (users().length === 0) {
-    <p>No users are provisioned yet.</p>
-  } @else {
-    <ul>
-      @for (user of users(); track user.id) {
-        <li>
-          {{ user.displayName }} ({{ user.email }})
-          @if (user.disabled) {
-            <span>Disabled</span>
-          } @else {
-            <button type="button" (click)="disable(user)">Disable</button>
+      <button type="submit">Save role</button>
+    </form>
+    @if (roles().length === 0) {
+      <p>No roles exist yet.</p>
+    } @else {
+      <ul>
+        @for (role of roles(); track role.id) {
+          <li>
+            {{ role.name }}
+            <button type="button" (click)="editRole(role)">Edit</button>
+          </li>
+        }
+      </ul>
+    }
+  </section>
+
+  <section *appHasPermission="'access.audit.read'">
+    <h2>Audit</h2>
+    @if (audit().length === 0) {
+      <p>No audit entries yet.</p>
+    } @else {
+      <table>
+        <thead>
+          <tr>
+            <th>When</th>
+            <th>Action</th>
+            <th>Subject</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (entry of audit(); track entry.id) {
+            <tr>
+              <td>{{ entry.occurredAtUtc }}</td>
+              <td>{{ entry.action }}</td>
+              <td>{{ entry.subjectType }} {{ entry.subjectId }}</td>
+            </tr>
           }
-        </li>
-      }
-    </ul>
-  }
-
-  <h2>Teams</h2>
-  <form [formGroup]="teamForm" (ngSubmit)="createTeam()">
-    <label for="team-name">Name</label>
-    <input id="team-name" formControlName="name" />
-    <button type="submit">Create team</button>
-  </form>
-  @if (teams().length === 0) {
-    <p>No teams exist yet.</p>
-  } @else {
-    <ul>
-      @for (team of teams(); track team.id) {
-        <li>{{ team.name }}</li>
-      }
-    </ul>
-  }
-
-  <h2>Team membership</h2>
-  <form [formGroup]="memberForm" (ngSubmit)="addMember()">
-    <label for="member-team">Team</label>
-    <select id="member-team" formControlName="teamId">
-      <option value="">Select a team</option>
-      @for (team of teams(); track team.id) {
-        <option [value]="team.id">{{ team.name }}</option>
-      }
-    </select>
-    <label for="member-user">User</label>
-    <select id="member-user" formControlName="userId">
-      <option value="">Select a user</option>
-      @for (user of users(); track user.id) {
-        <option [value]="user.id">{{ user.displayName }}</option>
-      }
-    </select>
-    <button type="submit">Add member</button>
-  </form>
+        </tbody>
+      </table>
+    }
+  </section>
 }

@@ -42,6 +42,32 @@ export interface UserListResponse {
 export interface RoleSummary {
   id: string;
   name: string;
+  description?: string | null;
+  permissionCodes: string[];
+}
+
+export interface PermissionCatalogItem {
+  code: string;
+  displayName: string;
+  module: string;
+  description: string;
+}
+
+export interface PermissionCatalogResponse {
+  permissions: PermissionCatalogItem[];
+}
+
+export interface AuditEntry {
+  id: string;
+  occurredAtUtc: string;
+  actorUserId?: string | null;
+  action: string;
+  subjectType: string;
+  subjectId?: string | null;
+}
+
+export interface AuditListResponse {
+  entries: AuditEntry[];
 }
 
 export interface RoleListResponse {
