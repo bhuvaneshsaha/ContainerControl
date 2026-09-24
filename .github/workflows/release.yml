@@ -1,0 +1,232 @@
+# Publishes a GitHub Release for a SemVer tag.
+# A tag push publishes that tag. workflow_dispatch from main creates the tag
+# when it is not already present, then publishes the release.
+# The tagged commit must already be on origin/main.
+# A published GitHub Release for the tag is left unchanged.
+# A draft for the same tag fails the job so an unpublished release is not treated as done.
+# This workflow does not run the pull request CI jobs and stores no secrets.
+# Stable releases are published (not drafts). A prerelease suffix, or the
+# workflow_dispatch prerelease input, marks the GitHub Release as a prerelease.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, for example 0.1.1 or v0.1.1"
+        required: true
+        type: string
+      notes:
+        description: "Release notes. Leave empty to generate notes from commits since the previous tag."
+        required: false
+        type: string
+      prerelease:
+        description: "Mark the GitHub Release as a prerelease"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - name: Resolve and validate tag
+        id: plan
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          REF_NAME: ${{ github.ref_name }}
+          HEAD_SHA: ${{ github.sha }}
+          INPUT_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || '' }}
+          INPUT_NOTES: ${{ github.event_name == 'workflow_dispatch' && inputs.notes || '' }}
+          INPUT_PRERELEASE: ${{ github.event_name == 'workflow_dispatch' && inputs.prerelease && 'true' || 'false' }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          workflow_escape() {
+            local value="$1"
+            value="${value//%/%25}"
+            value="${value//$'\n'/%0A}"
+            value="${value//$'\r'/%0D}"
+            printf '%s' "$value"
+          }
+
+          trim() {
+            local value="$1"
+            value="${value#"${value%%[![:space:]]*}"}"
+            value="${value%"${value##*[![:space:]]}"}"
+            printf '%s' "$value"
+          }
+
+          tag=""
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            if [ "$REF" != "refs/heads/main" ]; then
+              echo "::error title=Wrong branch::workflow_dispatch releases run from main. Selected ref was $(workflow_escape "$REF")."
+              exit 1
+            fi
+            raw="$(trim "$INPUT_VERSION")"
+            if [ -z "$raw" ]; then
+              echo "::error title=Missing version::Provide a version such as 0.1.1 or v0.1.1."
+              exit 1
+            fi
+            case "$raw" in
+              v*)
+                tag="$raw"
+                ;;
+              V*)
+                echo "::error title=Invalid tag::Use a lowercase v prefix ($(workflow_escape "$raw"))."
+                exit 1
+                ;;
+              *)
+                tag="v${raw}"
+                ;;
+            esac
+          elif [ "$EVENT_NAME" = "push" ]; then
+            case "$REF" in
+              refs/tags/*)
+                tag="$REF_NAME"
+                ;;
+              *)
+                echo "::error title=Unexpected ref::Tag publish expected refs/tags/*, got $(workflow_escape "$REF")."
+                exit 1
+                ;;
+            esac
+          else
+            echo "::error title=Unexpected event::Release workflow does not handle $(workflow_escape "$EVENT_NAME")."
+            exit 1
+          fi
+
+          tag_re='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'
+          if [[ ! "$tag" =~ $tag_re ]]; then
+            echo "::error title=Invalid tag::$(workflow_escape "$tag") is not a SemVer tag. Expected vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-prerelease, with no leading zeros and no build metadata."
+            exit 1
+          fi
+
+          if [[ "$tag" == *-* ]]; then
+            pre="${tag#*-}"
+            IFS='.' read -ra parts <<< "$pre"
+            for part in "${parts[@]}"; do
+              if [[ "$part" =~ ^0[0-9]+$ ]]; then
+                echo "::error title=Invalid tag::Prerelease identifier $(workflow_escape "$part") in $(workflow_escape "$tag") has a leading zero."
+                exit 1
+              fi
+            done
+          fi
+
+          prerelease=false
+          if [ "$INPUT_PRERELEASE" = "true" ] || [[ "$tag" == *-* ]]; then
+            prerelease=true
+          fi
+          if [ "$prerelease" = "true" ]; then
+            make_latest=false
+          else
+            make_latest=true
+          fi
+
+          work_dir="${RUNNER_TEMP:-/tmp}"
+          generate=true
+          notes_file=""
+          if [ -n "${INPUT_NOTES//[[:space:]]/}" ]; then
+            notes_file="${work_dir}/release-notes.md"
+            printf '%s\n' "$INPUT_NOTES" > "$notes_file"
+            generate=false
+          fi
+
+          checkout_sha="$(git rev-parse HEAD)"
+          if [ "$checkout_sha" != "$HEAD_SHA" ]; then
+            echo "::error title=Checkout mismatch::Checked out ${checkout_sha}, but the workflow SHA is ${HEAD_SHA}."
+            exit 1
+          fi
+
+          git fetch origin main --tags
+
+          if ! git merge-base --is-ancestor "$HEAD_SHA" origin/main; then
+            echo "::error title=Not on main::${tag} (${HEAD_SHA}) is not contained in origin/main. Tag a commit that is already on main."
+            exit 1
+          fi
+
+          if git rev-parse -q --verify "refs/tags/${tag}^{}" >/dev/null; then
+            tag_sha="$(git rev-parse "refs/tags/${tag}^{}")"
+            if [ "$tag_sha" != "$HEAD_SHA" ]; then
+              echo "::error title=Tag points elsewhere::${tag} already points at ${tag_sha}, not ${HEAD_SHA}. Refusing to create or replace the release."
+              exit 1
+            fi
+          fi
+
+          # gh and jq are preinstalled on ubuntu-latest.
+          lookup_out="${work_dir}/release-lookup.json"
+          lookup_err="${work_dir}/release-lookup.err"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft,url >"$lookup_out" 2>"$lookup_err"; then
+            is_draft="$(jq -r '.isDraft' "$lookup_out")"
+            view_url="$(jq -r '.url' "$lookup_out")"
+            if [ "$is_draft" = "true" ]; then
+              echo "::error title=Draft release exists::A draft GitHub Release for ${tag} already exists ($(workflow_escape "$view_url")). Publish or delete that draft before retrying. This workflow does not modify an existing release."
+              exit 1
+            fi
+            skip=true
+            echo "::notice title=Release exists::GitHub Release for ${tag} already exists ($(workflow_escape "$view_url")). Create was skipped."
+          elif grep -qi 'release not found' "$lookup_err"; then
+            skip=false
+            view_url=""
+            echo "No GitHub Release for ${tag}. It will be created."
+          else
+            echo "::error title=Release lookup failed::Could not check whether a release exists for ${tag}."
+            cat "$lookup_err"
+            exit 1
+          fi
+
+          {
+            echo "tag=${tag}"
+            echo "prerelease=${prerelease}"
+            echo "make_latest=${make_latest}"
+            echo "generate=${generate}"
+            echo "notes_file=${notes_file}"
+            echo "skip=${skip}"
+          } >> "$GITHUB_OUTPUT"
+
+          if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+            {
+              echo "### ${tag}"
+              echo
+              echo "- Prerelease: ${prerelease}"
+              echo "- Generate notes: ${generate}"
+              if [ "$skip" = "true" ]; then
+                echo "- Result: skipped because the release already exists"
+                echo "- URL: ${view_url}"
+              else
+                echo "- Result: create"
+              fi
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Create GitHub Release
+        if: ${{ success() && steps.plan.outputs.skip == 'false' }}
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        with:
+          tag_name: ${{ steps.plan.outputs.tag }}
+          name: ${{ steps.plan.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          body_path: ${{ steps.plan.outputs.notes_file }}
+          draft: false
+          prerelease: ${{ steps.plan.outputs.prerelease == 'true' }}
+          generate_release_notes: ${{ steps.plan.outputs.generate == 'true' }}
+          make_latest: ${{ steps.plan.outputs.make_latest }}
+          token: ${{ github.token }}
