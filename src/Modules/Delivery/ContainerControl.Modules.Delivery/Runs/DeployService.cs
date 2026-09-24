@@ -11,6 +11,7 @@ using ContainerControl.Modules.Platform.Hosts;
 using ContainerControl.Modules.Platform.Quotas;
 using ContainerControl.Modules.Registries.Connections;
 using ContainerControl.SharedKernel.CurrentUser;
+using ContainerControl.SharedKernel.Hostnames;
 using ContainerControl.SharedKernel.Time;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -110,13 +111,21 @@ public sealed class DeployService
             return DeployOutcome.Fail(StatusCodes.Status409Conflict, "There is no previous successful deployment.");
         }
 
-        await _apps.ReplaceDesiredAsync(applicationId, new DesiredState(
-            previous.Image,
-            previous.CommandJson,
-            previous.ComposeYaml,
-            previous.InternalPort,
-            previous.Hostname,
-            previous.Exposed), cancellationToken);
+        try
+        {
+            await _apps.ReplaceDesiredAsync(applicationId, new DesiredState(
+                previous.Image,
+                previous.CommandJson,
+                previous.ComposeYaml,
+                previous.InternalPort,
+                previous.Hostname,
+                previous.Exposed), cancellationToken);
+        }
+        catch (ArgumentException exception) when (exception.Message == PublicHostname.InvalidMessage)
+        {
+            return DeployOutcome.Fail(StatusCodes.Status400BadRequest, PublicHostname.InvalidMessage);
+        }
+
         return await DeployAsync(applicationId, _currentUser.UserId ?? Guid.Empty, approved: true, cancellationToken);
     }
 
@@ -205,7 +214,7 @@ public sealed class DeployService
 
         var anyExposed = plan.Services.Any(service => service.Exposed) || (string.IsNullOrWhiteSpace(app.ComposeYaml) && app.Exposed);
         var publicHost = PublicHostname.Normalize(app.Hostname);
-        if (anyExposed && !await _edge.HostnameAllowedAsync(app.Hostname, cancellationToken))
+        if (anyExposed && (PublicHostname.TraefikHostRule(publicHost) is null || !await _edge.HostnameAllowedAsync(publicHost, cancellationToken)))
         {
             var message = publicHost is null
                 ? "Set a hostname under an allowed domain."

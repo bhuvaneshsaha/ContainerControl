@@ -4,6 +4,7 @@ using ContainerControl.Modules.Applications.Persistence;
 using ContainerControl.Modules.Applications.Secrets;
 using ContainerControl.SharedKernel.Auditing;
 using ContainerControl.SharedKernel.CurrentUser;
+using ContainerControl.SharedKernel.Hostnames;
 using ContainerControl.SharedKernel.Time;
 using Microsoft.EntityFrameworkCore;
 
@@ -72,12 +73,17 @@ public sealed class WorkloadAdmin : IWorkloadStore, ISecretCatalog
 
     public async Task ReplaceDesiredAsync(Guid id, DesiredState desired, CancellationToken cancellationToken)
     {
+        if (!PublicHostname.TryCanonical(desired.Hostname, out var hostname, out var hostnameError))
+        {
+            throw new ArgumentException(hostnameError ?? PublicHostname.InvalidMessage);
+        }
+
         var app = await _db.Apps.SingleAsync(item => item.Id == id, cancellationToken);
         app.Image = desired.Image;
         app.CommandJson = desired.CommandJson;
         app.ComposeYaml = desired.ComposeYaml;
         app.InternalPort = desired.InternalPort;
-        app.Hostname = desired.Hostname;
+        app.Hostname = hostname;
         app.Exposed = desired.Exposed;
         await _db.SaveChangesAsync(cancellationToken);
     }
@@ -111,6 +117,11 @@ public sealed class WorkloadAdmin : IWorkloadStore, ISecretCatalog
             return (false, null, "Enter an image or a compose file.");
         }
 
+        if (!PublicHostname.TryCanonical(hostname, out var canonicalHostname, out var hostnameError))
+        {
+            return (false, null, hostnameError);
+        }
+
         var app = new ContainerApp
         {
             Id = Guid.NewGuid(),
@@ -122,7 +133,7 @@ public sealed class WorkloadAdmin : IWorkloadStore, ISecretCatalog
             CommandJson = command is null || command.Count == 0 ? null : JsonSerializer.Serialize(command),
             ComposeYaml = string.IsNullOrWhiteSpace(composeYaml) ? null : composeYaml,
             InternalPort = internalPort,
-            Hostname = string.IsNullOrWhiteSpace(hostname) ? null : hostname.Trim().ToLowerInvariant(),
+            Hostname = canonicalHostname,
             Exposed = exposed,
             RequiresApproval = ApprovalPolicy.Required(environment, requiresApproval),
             Status = "registered",
@@ -156,11 +167,16 @@ public sealed class WorkloadAdmin : IWorkloadStore, ISecretCatalog
             return (false, "Enter an image or a compose file.");
         }
 
+        if (!PublicHostname.TryCanonical(hostname, out var canonicalHostname, out var hostnameError))
+        {
+            return (false, hostnameError);
+        }
+
         app.Image = string.IsNullOrWhiteSpace(image) ? null : image.Trim();
         app.CommandJson = command is null || command.Count == 0 ? null : JsonSerializer.Serialize(command);
         app.ComposeYaml = string.IsNullOrWhiteSpace(composeYaml) ? null : composeYaml;
         app.InternalPort = internalPort;
-        app.Hostname = string.IsNullOrWhiteSpace(hostname) ? null : hostname.Trim().ToLowerInvariant();
+        app.Hostname = canonicalHostname;
         app.Exposed = exposed;
         app.RequiresApproval = ApprovalPolicy.Required(app.Environment, requiresApproval);
         await _db.SaveChangesAsync(cancellationToken);
