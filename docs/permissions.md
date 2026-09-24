@@ -33,7 +33,7 @@ A new product capability needs a new code in `PermissionCatalog` and a check at 
 | `runtime.stats.read` | Runtime |
 | `runtime.control` | Runtime |
 
-`GET /permissions` returns the catalog for a caller with `access.roles.manage`. `GET /me/permissions` returns the signed-in user's codes. Role create, update, and delete use `access.roles.manage`. User create, disable, and role assignment use `access.users.manage`.
+`GET /permissions` returns the catalog for a caller with `access.roles.manage`. `GET /me/permissions` returns the signed-in user's codes. Role create, update, and delete use `access.roles.manage`. User create, disable, and role assignment use `access.users.manage`. `deploy.approve` accepts a deploy that is waiting. The Applications page shows that action only for that code.
 
 Development sample roles, created only when `ASPNETCORE_ENVIRONMENT` is `Development`:
 

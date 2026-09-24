@@ -55,9 +55,21 @@ public sealed class DeployService
         _logger = logger;
     }
 
-    public async Task<DeployOutcome> DeployAsync(Guid applicationId, Guid actorUserId, bool approved, CancellationToken cancellationToken)
+    public async Task<DeployOutcome> DeployAsync(
+        Guid applicationId,
+        Guid actorUserId,
+        bool approved,
+        CancellationToken cancellationToken,
+        bool requireMembership = true)
     {
-        if (!await MemberAsync(applicationId, actorUserId, cancellationToken))
+        if (requireMembership)
+        {
+            if (!await MemberAsync(applicationId, actorUserId, cancellationToken))
+            {
+                return DeployOutcome.NotFound();
+            }
+        }
+        else if (await _apps.FindAsync(applicationId, cancellationToken) is null)
         {
             return DeployOutcome.NotFound();
         }

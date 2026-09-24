@@ -58,6 +58,7 @@ export interface AppResponse {
   status: string;
   hostname: string | null;
   exposed: boolean;
+  requiresApproval: boolean;
 }
 
 export interface AppListResponse {

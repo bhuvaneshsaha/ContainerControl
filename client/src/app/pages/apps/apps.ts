@@ -41,6 +41,7 @@ export class Apps {
     internalPort: new FormControl('', { nonNullable: true }),
     hostname: new FormControl('', { nonNullable: true }),
     exposed: new FormControl(false, { nonNullable: true }),
+    requireApproval: new FormControl(false, { nonNullable: true }),
   });
 
   constructor() {
@@ -80,6 +81,7 @@ export class Apps {
           hostname: value.hostname || null,
           image: null,
           composeYaml: value.composeYaml,
+          requiresApproval: value.environment === 'prod' || value.requireApproval,
         }),
       );
       await this.load();
@@ -149,7 +151,7 @@ export class Apps {
     }
   }
 
-  async act(app: AppResponse, action: 'deploy' | 'start' | 'stop' | 'restart' | 'rollback'): Promise<void> {
+  async act(app: AppResponse, action: 'deploy' | 'approve' | 'start' | 'stop' | 'restart' | 'rollback'): Promise<void> {
     this.message.set('');
     try {
       await firstValueFrom(this.http.post(`${environment.apiUrl}/apps/${app.id}/${action}`, {}));
