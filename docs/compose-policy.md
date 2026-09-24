@@ -10,7 +10,10 @@ Allowed:
 - `depends_on`, as a list or a map of service names
 - named volumes
 - `healthcheck` with `test`, `interval`, `timeout`, `retries`, and `start_period`
+- `deploy.resources.limits` with `cpus`, `memory`, and `storage` (for example `cpus: "0.5"`, `memory: 256M`, `storage: 1G`)
 - `x-containercontrol.exposed` and `x-containercontrol.port` to mark a service for Traefik
+
+When the application's team has a quota, every service must declare all three limits and the sum must fit. CPU and memory are also set on the container. Storage is counted against the team quota. It is not sent as a Docker storage option. A team with no quota can still omit the limits.
 
 Deploy starts dependency services first. When a service defines a healthcheck, that check is set on the container and the next service waits until the status is healthy. `disable: true` or a `NONE` test skips the wait. A cycle, a missing dependency, or a healthcheck that becomes unhealthy rejects the deploy. The wait is capped at five minutes.
 

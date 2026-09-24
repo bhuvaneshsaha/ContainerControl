@@ -143,5 +143,7 @@ public class LogTailTests
         public Task<string?> FindContainerIdByNameAsync(DockerEndpoint endpoint, string name, CancellationToken cancellationToken) => throw new NotSupportedException();
 
         public Task<string?> ReadHealthStatusAsync(DockerEndpoint endpoint, string containerId, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<HostCapacity> ReadCapacityAsync(DockerEndpoint endpoint, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 }

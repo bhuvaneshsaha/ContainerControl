@@ -1,4 +1,5 @@
 using ContainerControl.Modules.Platform.Hosts;
+using ContainerControl.Modules.Platform.Quotas;
 using ContainerControl.SharedKernel.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -14,6 +15,10 @@ public sealed class PlatformDbContext : DbContext
     public DbSet<ModuleBoundary> Boundaries => Set<ModuleBoundary>();
 
     public DbSet<DockerHost> Hosts => Set<DockerHost>();
+
+    public DbSet<TeamQuota> Quotas => Set<TeamQuota>();
+
+    public DbSet<HostCapacityReading> Capacity => Set<HostCapacityReading>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -34,6 +39,16 @@ public sealed class PlatformDbContext : DbContext
             entity.Property(host => host.EngineVersion).HasMaxLength(64);
             entity.HasIndex(host => host.Name).IsUnique();
             entity.Property<uint>("xmin").HasColumnType("xid").ValueGeneratedOnAddOrUpdate().IsConcurrencyToken();
+        });
+        modelBuilder.Entity<TeamQuota>(entity =>
+        {
+            entity.ToTable("team_quotas");
+            entity.HasKey(quota => quota.TeamId);
+        });
+        modelBuilder.Entity<HostCapacityReading>(entity =>
+        {
+            entity.ToTable("host_capacity");
+            entity.HasKey(reading => reading.HostId);
         });
     }
 }

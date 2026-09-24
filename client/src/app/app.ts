@@ -18,6 +18,10 @@ export class App {
 
   readonly signedIn = this.auth.signedIn;
 
+  canOpenCapacity(): boolean {
+    return this.permissions.hasPermission('platform.quotas.manage') || this.permissions.hasPermission('platform.capacity.read');
+  }
+
   canOpenAccess(): boolean {
     return ['access.users.manage', 'access.teams.manage', 'access.roles.manage', 'access.audit.read'].some((code) =>
       this.permissions.hasPermission(code),

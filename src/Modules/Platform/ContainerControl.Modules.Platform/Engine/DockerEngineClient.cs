@@ -1,3 +1,4 @@
+using ContainerControl.Modules.Platform.Quotas;
 using Docker.DotNet;
 using Docker.DotNet.Models;
 
@@ -10,6 +11,13 @@ public sealed class DockerEngineClient : IDockerEngine
         using var client = Connect(endpoint);
         var version = await client.System.GetVersionAsync(cancellationToken);
         return new EngineVersion(version.Version, version.APIVersion);
+    }
+
+    public async Task<HostCapacity> ReadCapacityAsync(DockerEndpoint endpoint, CancellationToken cancellationToken)
+    {
+        using var client = Connect(endpoint);
+        var info = await client.System.GetSystemInfoAsync(cancellationToken);
+        return new HostCapacity(info.NCPU, info.MemTotal, HostCapacityText.DataSpaceBytes(info.DriverStatus));
     }
 
     public async Task<IReadOnlyList<string>> ListContainerIdsAsync(DockerEndpoint endpoint, CancellationToken cancellationToken)
@@ -94,7 +102,9 @@ public sealed class DockerEngineClient : IDockerEngine
                 PortBindings = plan.PublishedPorts.ToDictionary(
                     pair => pair.Key,
                     pair => (IList<PortBinding>)new List<PortBinding> { new() { HostPort = pair.Value } }),
-                RestartPolicy = new RestartPolicy { Name = ToRestart(plan.RestartPolicy) }
+                RestartPolicy = new RestartPolicy { Name = ToRestart(plan.RestartPolicy) },
+                NanoCPUs = plan.NanoCpus,
+                Memory = plan.MemoryLimit
             },
             NetworkingConfig = new NetworkingConfig
             {

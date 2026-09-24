@@ -8,6 +8,7 @@ using ContainerControl.Modules.Delivery.Persistence;
 using ContainerControl.Modules.Edge.Domains;
 using ContainerControl.Modules.Platform.Engine;
 using ContainerControl.Modules.Platform.Hosts;
+using ContainerControl.Modules.Platform.Quotas;
 using ContainerControl.Modules.Registries.Connections;
 using ContainerControl.SharedKernel.CurrentUser;
 using ContainerControl.SharedKernel.Time;
@@ -26,6 +27,7 @@ public sealed class DeployService
     private readonly ISecretStore _secretStore;
     private readonly IEdgeGateway _edge;
     private readonly IRegistryLogin _registries;
+    private readonly ITeamQuotaLookup _quotas;
     private readonly ITeamDirectory _teams;
     private readonly ICurrentUser _currentUser;
     private readonly IClock _clock;
@@ -40,6 +42,7 @@ public sealed class DeployService
         ISecretStore secretStore,
         IEdgeGateway edge,
         IRegistryLogin registries,
+        ITeamQuotaLookup quotas,
         ITeamDirectory teams,
         ICurrentUser currentUser,
         IClock clock,
@@ -53,6 +56,7 @@ public sealed class DeployService
         _secretStore = secretStore;
         _edge = edge;
         _registries = registries;
+        _quotas = quotas;
         _teams = teams;
         _currentUser = currentUser;
         _clock = clock;
@@ -189,6 +193,16 @@ public sealed class DeployService
             return DeployOutcome.Fail(StatusCodes.Status400BadRequest, string.Join(" ", plan.Errors));
         }
 
+        var quotaMessage = QuotaPolicy.Rejection(
+            await _quotas.FindAsync(app.TeamId, cancellationToken),
+            plan.Services.Select(service => service.Resources).ToArray());
+        if (quotaMessage is not null)
+        {
+            await RecordAsync(app, "rejected", quotaMessage, cancellationToken);
+            await _apps.SetStatusAsync(app.Id, "rejected", cancellationToken);
+            return DeployOutcome.Fail(StatusCodes.Status400BadRequest, quotaMessage);
+        }
+
         var anyExposed = plan.Services.Any(service => service.Exposed) || (string.IsNullOrWhiteSpace(app.ComposeYaml) && app.Exposed);
         var publicHost = PublicHostname.Normalize(app.Hostname);
         if (anyExposed && !await _edge.HostnameAllowedAsync(app.Hostname, cancellationToken))
@@ -295,7 +309,9 @@ public sealed class DeployService
                 [],
                 new Dictionary<string, string>(),
                 "unless-stopped",
-                service.Healthcheck), cancellationToken);
+                service.Healthcheck,
+                service.Resources is null ? 0 : service.Resources.CpuMillicores * 1_000_000L,
+                service.Resources?.MemoryBytes ?? 0), cancellationToken);
             try
             {
                 if (injected.Files.Count > 0)

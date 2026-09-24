@@ -25,7 +25,9 @@ public sealed record ContainerPlan(
     IReadOnlyList<string> Binds,
     IReadOnlyDictionary<string, string> PublishedPorts,
     string RestartPolicy,
-    ContainerHealthcheck? Healthcheck = null);
+    ContainerHealthcheck? Healthcheck = null,
+    long NanoCpus = 0,
+    long MemoryLimit = 0);
 
 public interface IDockerEngine
 {
@@ -87,7 +89,11 @@ public interface IDockerEngine
         DockerEndpoint endpoint,
         string containerId,
         CancellationToken cancellationToken);
+
+    Task<HostCapacity> ReadCapacityAsync(DockerEndpoint endpoint, CancellationToken cancellationToken);
 }
+
+public sealed record HostCapacity(long CpuCount, long MemoryBytes, long? StorageBytes);
 
 public sealed record ImagePullAuth(string Server, string Username, string Password);
 

@@ -1,4 +1,5 @@
 using ContainerControl.Modules.Platform.Engine;
+using ContainerControl.Modules.Platform.Quotas;
 using YamlDotNet.Core;
 using YamlDotNet.RepresentationModel;
 
@@ -12,7 +13,8 @@ public sealed record PlannedService(
     int? Port,
     IReadOnlyDictionary<string, string> Environment,
     IReadOnlyList<string> DependsOn,
-    ContainerHealthcheck? Healthcheck = null);
+    ContainerHealthcheck? Healthcheck = null,
+    ServiceResources? Resources = null);
 
 public sealed record ComposePlan(bool Accepted, IReadOnlyList<string> Errors, IReadOnlyList<PlannedService> Services);
 
@@ -111,7 +113,8 @@ public static class ComposePolicy
                 port,
                 ReadEnvironment(Child(body, "environment")),
                 ReadDepends(Child(body, "depends_on")),
-                healthcheck));
+                healthcheck,
+                ReadResources(body, name, errors)));
         }
 
         if (services.Count == 0 && errors.Count == 0)
@@ -446,6 +449,26 @@ public static class ComposePolicy
         }
 
         return [];
+    }
+
+    private static ServiceResources? ReadResources(YamlMappingNode body, string name, List<string> errors)
+    {
+        if (Child(body, "deploy") is not YamlMappingNode deploy
+            || Child(deploy, "resources") is not YamlMappingNode resources
+            || Child(resources, "limits") is not YamlMappingNode limits)
+        {
+            return null;
+        }
+
+        if (!ResourceQuantity.TryParseCpus(Text(Child(limits, "cpus")), out var cpu)
+            || !ResourceQuantity.TryParseBytes(Text(Child(limits, "memory")), out var memory)
+            || !ResourceQuantity.TryParseBytes(Text(Child(limits, "storage")), out var storage))
+        {
+            errors.Add($"Service '{name}' needs CPU, memory, and storage limits, such as cpus: \"0.5\", memory: 256M, and storage: 1G.");
+            return null;
+        }
+
+        return new ServiceResources(cpu, memory, storage);
     }
 
     private static YamlNode? Child(YamlMappingNode node, string key) =>
