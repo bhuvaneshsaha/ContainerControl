@@ -35,6 +35,7 @@ export class Access {
   readonly roles = signal<readonly RoleSummary[]>([]);
   readonly catalog = signal<readonly PermissionCatalogItem[]>([]);
   readonly audit = signal<readonly AuditEntry[]>([]);
+  readonly grants = signal<readonly { id: string; userId: string; permissionCode: string; expiresAtUtc: string }[]>([]);
   readonly selectedCodes = signal<readonly string[]>([]);
   readonly editingRoleId = signal<string | null>(null);
   readonly userForm = new FormGroup({
@@ -53,6 +54,11 @@ export class Access {
   readonly roleForm = new FormGroup({
     name: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
     description: new FormControl('', { nonNullable: true }),
+  });
+  readonly grantForm = new FormGroup({
+    userId: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
+    permissionCode: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
+    minutes: new FormControl(30, { nonNullable: true, validators: [Validators.required, Validators.min(5), Validators.max(60)] }),
   });
 
   constructor() {
@@ -81,6 +87,10 @@ export class Access {
 
       if (this.permissions.hasPermission('access.audit.read')) {
         tasks.push(this.loadAudit());
+      }
+
+      if (this.permissions.hasPermission('access.breakglass.grant')) {
+        tasks.push(this.loadGrants());
       }
 
       await Promise.all(tasks);
@@ -220,6 +230,39 @@ export class Access {
   private async loadCatalog(): Promise<void> {
     const catalog = await firstValueFrom(this.http.get<PermissionCatalogResponse>(`${environment.apiUrl}/permissions`));
     this.catalog.set(catalog.permissions);
+  }
+
+  async grant(): Promise<void> {
+    this.message.set('');
+    if (this.grantForm.invalid) {
+      this.message.set('Enter a user, a catalog permission, and 5 to 60 minutes.');
+      return;
+    }
+
+    const value = this.grantForm.getRawValue();
+    try {
+      await firstValueFrom(
+        this.http.post(`${environment.apiUrl}/access/break-glass`, {
+          userId: value.userId.trim(),
+          permissionCode: value.permissionCode,
+          minutes: value.minutes,
+        }),
+      );
+      this.message.set('The grant was saved. It is checked by the permission API.');
+      await this.load();
+    } catch (error) {
+      this.message.set(problemMessage(error, 'The grant could not be saved.'));
+    }
+  }
+
+  private async loadGrants(): Promise<void> {
+    const response = await firstValueFrom(
+      this.http.get<{ grants: { id: string; userId: string; permissionCode: string; expiresAtUtc: string }[]; permissions: PermissionCatalogItem[] }>(
+        `${environment.apiUrl}/access/break-glass`,
+      ),
+    );
+    this.grants.set(response.grants);
+    this.catalog.set(response.permissions);
   }
 
   private async loadAudit(): Promise<void> {

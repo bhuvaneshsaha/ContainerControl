@@ -15,13 +15,19 @@ describe('Access', () => {
       providers: [provideHttpClient(), provideHttpClientTesting()],
     }).compileComponents();
 
-    TestBed.inject(PermissionService).setPermissions(['access.roles.manage', 'access.audit.read']);
+    TestBed.inject(PermissionService).setPermissions(['access.roles.manage', 'access.audit.read', 'access.breakglass.grant']);
     fixture = TestBed.createComponent(Access);
     const http = TestBed.inject(HttpTestingController);
     http.expectOne(`${environment.apiUrl}/access/roles`).flush({
       roles: [{ id: 'role-1', name: 'Developer', description: null, permissionCodes: ['apps.read'] }],
     });
     http.expectOne(`${environment.apiUrl}/permissions`).flush({
+      permissions: [
+        { code: 'apps.read', displayName: 'Read applications', module: 'Applications', description: 'View applications.' },
+      ],
+    });
+    http.expectOne(`${environment.apiUrl}/access/break-glass`).flush({
+      grants: [],
       permissions: [
         { code: 'apps.read', displayName: 'Read applications', module: 'Applications', description: 'View applications.' },
       ],
@@ -47,5 +53,6 @@ describe('Access', () => {
     expect(text).toContain('Read applications (apps.read)');
     expect(text).toContain('access.role.created');
     expect(fixture.nativeElement.querySelector('[id="perm-apps.read"]')).not.toBeNull();
+    expect(text).toContain('does not open a shell');
   });
 });

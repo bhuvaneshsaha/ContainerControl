@@ -4,7 +4,7 @@ One host, one PostgreSQL database, one schema per module. Modules do not write e
 
 | Module | Schema | This slice |
 | --- | --- | --- |
-| Access | `access` | Identity users, teams, permission roles composed from the catalog, API token issuance, an unevaluated break-glass table, and append-only audit. `GET /access/audit` reads the latest rows for `access.audit.read`. |
+| Access | `access` | Identity users, teams, permission roles composed from the catalog, API token issuance, break-glass grants of 5 to 60 minutes, and append-only audit. An unexpired grant is included by the permission check and by `/auth/session`. It does not open a shell or the Docker socket. `GET /access/audit` reads the latest rows for `access.audit.read`. |
 | Platform | `platform` | Docker host registration, Engine version ping, team CPU/memory/storage quotas, and a host capacity table. `GET /platform/hosts/choices` returns names for app placement and omits the Engine endpoint. |
 | Registries | `registries` | Connections typed `Acr`, `Ecr`, `DockerHub`, or `Harbor`. Pull credentials are Infisical paths. ECR tokens refresh in the background. |
 | Applications | `applications` | Desired state and secret references. Values are written to Infisical. `prod` always requires approval. Other environments require it when the application opts in. |

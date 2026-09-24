@@ -113,6 +113,34 @@
     }
   </section>
 
+  <section *appHasPermission="'access.breakglass.grant'">
+    <h2>Break-glass</h2>
+    <p>This grant is checked by the same permission API. It does not open a shell or the Docker socket.</p>
+    <form [formGroup]="grantForm" (ngSubmit)="grant()">
+      <label for="grant-user">User id</label>
+      <input id="grant-user" formControlName="userId" />
+      <label for="grant-permission">Permission</label>
+      <select id="grant-permission" formControlName="permissionCode">
+        <option value="">Choose a permission</option>
+        @for (permission of catalog(); track permission.code) {
+          <option [value]="permission.code">{{ permission.displayName }} ({{ permission.code }})</option>
+        }
+      </select>
+      <label for="grant-minutes">Minutes</label>
+      <input id="grant-minutes" type="number" min="5" max="60" formControlName="minutes" />
+      <button type="submit">Grant</button>
+    </form>
+    @if (grants().length === 0) {
+      <p>No break-glass grants are active.</p>
+    } @else {
+      <ul>
+        @for (grant of grants(); track grant.id) {
+          <li>{{ grant.permissionCode }} for {{ grant.userId }} until {{ grant.expiresAtUtc }}</li>
+        }
+      </ul>
+    }
+  </section>
+
   <section *appHasPermission="'access.audit.read'">
     <h2>Audit</h2>
     @if (audit().length === 0) {

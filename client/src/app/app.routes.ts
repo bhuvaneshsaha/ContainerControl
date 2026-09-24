@@ -39,7 +39,7 @@ export const routes: Routes = [
       {
         path: 'access',
         title: 'Users and teams',
-        canActivate: [permissionGuardAny(['access.users.manage', 'access.teams.manage', 'access.roles.manage', 'access.audit.read'])],
+        canActivate: [permissionGuardAny(['access.users.manage', 'access.teams.manage', 'access.roles.manage', 'access.audit.read', 'access.breakglass.grant'])],
         loadComponent: () => import('./pages/access/access').then((module) => module.Access),
       },
       {

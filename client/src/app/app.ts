@@ -23,7 +23,7 @@ export class App {
   }
 
   canOpenAccess(): boolean {
-    return ['access.users.manage', 'access.teams.manage', 'access.roles.manage', 'access.audit.read'].some((code) =>
+    return ['access.users.manage', 'access.teams.manage', 'access.roles.manage', 'access.audit.read', 'access.breakglass.grant'].some((code) =>
       this.permissions.hasPermission(code),
     );
   }

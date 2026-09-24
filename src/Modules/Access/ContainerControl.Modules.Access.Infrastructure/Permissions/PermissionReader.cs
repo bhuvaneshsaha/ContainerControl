@@ -1,6 +1,8 @@
 using ContainerControl.Modules.Access.Application.Permissions;
+using ContainerControl.Modules.Access.Domain.BreakGlass;
 using ContainerControl.Modules.Access.Domain.Permissions;
 using ContainerControl.Modules.Access.Infrastructure.Persistence;
+using ContainerControl.SharedKernel.Time;
 using Microsoft.EntityFrameworkCore;
 
 namespace ContainerControl.Modules.Access.Infrastructure.Permissions;
@@ -8,13 +10,15 @@ namespace ContainerControl.Modules.Access.Infrastructure.Permissions;
 public sealed class PermissionReader : IPermissionReader
 {
     private readonly AccessDbContext _db;
+    private readonly IClock _clock;
 
-    public PermissionReader(AccessDbContext db)
+    public PermissionReader(AccessDbContext db, IClock clock)
     {
         _db = db;
+        _clock = clock;
     }
 
-    public async Task<IReadOnlyList<string>> GetEffectivePermissionCodesAsync(
+    public async Task<IReadOnlyList<string>> GetAssignedPermissionCodesAsync(
         Guid userId,
         CancellationToken cancellationToken)
     {
@@ -24,6 +28,17 @@ public sealed class PermissionReader : IPermissionReader
             .Distinct()
             .OrderBy(code => code)
             .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<string>> GetEffectivePermissionCodesAsync(
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        var assigned = await GetAssignedPermissionCodesAsync(userId, cancellationToken);
+        var grants = await _db.BreakGlassGrants.AsNoTracking()
+            .Where(grant => grant.UserId == userId)
+            .ToListAsync(cancellationToken);
+        return BreakGlassPolicy.Effective(assigned, grants, _clock.UtcNow);
     }
 
     public Task<IReadOnlyList<PermissionDefinition>> GetCatalogAsync(CancellationToken cancellationToken)
