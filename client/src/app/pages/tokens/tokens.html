@@ -1,14 +1,18 @@
 <h1>API tokens</h1>
-<p>The token is shown once. CI sends it as a bearer token to the deploy webhook.</p>
+<p>CI sends the token as a bearer token to the deploy webhook. Copy it before you leave this panel. It is shown once.</p>
+<p>Issued tokens cannot be listed or revoked from this screen. The API issues a token and does not return the list or a revoke action.</p>
 <form [formGroup]="form" (ngSubmit)="issue()">
   <label for="token-name">Name</label>
   <input id="token-name" formControlName="name" />
-  <button type="submit">Issue token</button>
+  <button type="submit" [disabled]="busy() !== null">{{ busy() === 'issue' ? 'Issuing…' : 'Issue token' }}</button>
 </form>
-@if (message()) {
-  <p role="alert">{{ message() }}</p>
-}
-@if (token()) {
-  <p>Copy this token now. It will not be shown again.</p>
-  <pre>{{ token() }}</pre>
+@if (issued(); as issued) {
+  <section class="token-panel" role="status" aria-labelledby="issued-title">
+    <h2 id="issued-title">Token issued</h2>
+    <p>Copy this token now. It will not be shown again.</p>
+    <label for="issued-token">Token value</label>
+    <input id="issued-token" readonly [value]="issued.token" />
+    <button type="button" (click)="copy()">Copy token</button>
+    <button type="button" (click)="dismissIssued()">I’ve copied it</button>
+  </section>
 }

@@ -2,12 +2,16 @@ import { Component, inject } from '@angular/core';
 import { Router, RouterLink, RouterOutlet } from '@angular/router';
 
 import { AuthService } from './core/auth';
+import { ConfirmService } from './core/confirm';
+import { FeedbackService } from './core/feedback';
 import { PermissionService } from './core/permissions';
+import { ConfirmDialog } from './shared/confirm-dialog';
+import { FeedbackBanner } from './shared/feedback-banner';
 import { HasPermission } from './shared/has-permission';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet, RouterLink, HasPermission],
+  imports: [RouterOutlet, RouterLink, HasPermission, FeedbackBanner, ConfirmDialog],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
@@ -15,6 +19,8 @@ export class App {
   private readonly auth = inject(AuthService);
   private readonly permissions = inject(PermissionService);
   private readonly router = inject(Router);
+  private readonly feedback = inject(FeedbackService);
+  private readonly confirm = inject(ConfirmService);
 
   readonly signedIn = this.auth.signedIn;
 
@@ -33,6 +39,10 @@ export class App {
   }
 
   async signOut(): Promise<void> {
+    this.feedback.clear();
+    if (this.confirm.request()) {
+      this.confirm.answer(false);
+    }
     await this.auth.signOut();
     await this.router.navigateByUrl('/sign-in');
   }

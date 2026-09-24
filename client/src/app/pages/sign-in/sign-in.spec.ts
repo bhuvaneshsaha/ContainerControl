@@ -1,8 +1,9 @@
 import { provideHttpClient } from '@angular/common/http';
-import { provideHttpClientTesting } from '@angular/common/http/testing';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
 
+import { environment } from '../../../environments/environment';
 import { SignIn } from './sign-in';
 
 describe('SignIn', () => {
@@ -33,4 +34,34 @@ describe('SignIn', () => {
     await fixture.whenStable();
     expect(fixture.nativeElement.textContent).toContain('Enter an email and password.');
   });
+
+  it('opens applications after sign-in when the account can read them', async () => {
+    const http = TestBed.inject(HttpTestingController);
+    const router = TestBed.inject(Router);
+    const navigate = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
+    fixture.componentInstance.form.setValue({ email: 'developer@localhost', password: 'secret' });
+
+    const pending = fixture.componentInstance.submit();
+    const login = await nextRequest(http, `${environment.apiUrl}/auth/login`);
+    login.flush({});
+    const session = await nextRequest(http, `${environment.apiUrl}/auth/session`);
+    session.flush({ signedIn: true, permissions: ['apps.read'] });
+    await pending;
+
+    expect(navigate).toHaveBeenCalledWith('/apps');
+    http.verify();
+  });
 });
+
+async function nextRequest(http: HttpTestingController, url: string) {
+  const started = Date.now();
+  while (Date.now() - started < 1000) {
+    const matches = http.match(url);
+    if (matches.length === 1) {
+      return matches[0];
+    }
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+
+  throw new Error(`Timed out waiting for ${url}`);
+}

@@ -1,0 +1,8 @@
+<div class="feedback-stack">
+  @for (item of feedback.items(); track item.id) {
+    <p class="feedback" [class.feedback-alert]="item.kind === 'alert'" [attr.role]="item.kind">
+      <span>{{ item.text }}</span>
+      <button type="button" (click)="feedback.dismiss(item.id)">Dismiss</button>
+    </p>
+  }
+</div>

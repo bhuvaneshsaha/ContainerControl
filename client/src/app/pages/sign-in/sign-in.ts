@@ -3,6 +3,8 @@ import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angula
 import { Router } from '@angular/router';
 
 import { AuthService } from '../../core/auth';
+import { resolveHomePath } from '../../core/home';
+import { PermissionService } from '../../core/permissions';
 
 @Component({
   selector: 'app-sign-in',
@@ -12,6 +14,7 @@ import { AuthService } from '../../core/auth';
 })
 export class SignIn {
   private readonly auth = inject(AuthService);
+  private readonly permissions = inject(PermissionService);
   private readonly router = inject(Router);
 
   readonly form = new FormGroup({
@@ -34,7 +37,7 @@ export class SignIn {
     this.submitting.set(true);
     try {
       await this.auth.signIn(this.form.controls.email.value.trim(), this.form.controls.password.value);
-      await this.router.navigateByUrl('/permissions');
+      await this.router.navigateByUrl(resolveHomePath((code) => this.permissions.hasPermission(code)));
     } catch {
       this.errorMessage.set('Sign-in failed. Check the email and password.');
     } finally {

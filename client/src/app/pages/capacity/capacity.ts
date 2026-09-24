@@ -4,6 +4,8 @@ import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angula
 import { firstValueFrom } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
+import { runBusy } from '../../core/busy';
+import { FeedbackService } from '../../core/feedback';
 import { problemMessage } from '../../core/problem-message';
 import { PermissionService } from '../../core/permissions';
 import { HasPermission } from '../../shared/has-permission';
@@ -32,9 +34,10 @@ interface CapacityRow {
 export class Capacity {
   private readonly http = inject(HttpClient);
   private readonly permissions = inject(PermissionService);
+  private readonly feedback = inject(FeedbackService);
 
   readonly status = signal<'loading' | 'ready' | 'error'>('loading');
-  readonly message = signal('');
+  readonly busy = signal<string | null>(null);
   readonly quotas = signal<readonly QuotaResponse[]>([]);
   readonly hosts = signal<readonly CapacityRow[]>([]);
   readonly form = new FormGroup({
@@ -72,38 +75,43 @@ export class Capacity {
   }
 
   async save(): Promise<void> {
-    this.message.set('');
+    this.feedback.clear();
     if (this.form.invalid) {
-      this.message.set('Enter a team and a CPU, memory, and storage quota.');
+      this.form.markAllAsTouched();
+      this.feedback.error('Enter a team and a CPU, memory, and storage quota.');
       return;
     }
 
     const value = this.form.getRawValue();
     const gib = 1024 * 1024 * 1024;
-    try {
-      await firstValueFrom(
-        this.http.put(`${environment.apiUrl}/platform/quotas/${value.teamId}`, {
-          cpuMillicores: Math.round(value.cpu * 1000),
-          memoryBytes: Math.round(value.memoryGiB * gib),
-          storageBytes: Math.round(value.storageGiB * gib),
-        }),
-      );
-      this.message.set('The team quota was saved.');
-      await this.load();
-    } catch (error) {
-      this.message.set(problemMessage(error, 'The quota could not be saved.'));
-    }
+    await runBusy(this.busy, 'save', async () => {
+      try {
+        await firstValueFrom(
+          this.http.put(`${environment.apiUrl}/platform/quotas/${value.teamId}`, {
+            cpuMillicores: Math.round(value.cpu * 1000),
+            memoryBytes: Math.round(value.memoryGiB * gib),
+            storageBytes: Math.round(value.storageGiB * gib),
+          }),
+        );
+        this.feedback.success('The team quota was saved.');
+        await this.load();
+      } catch (error) {
+        this.feedback.error(problemMessage(error, 'The quota could not be saved.'));
+      }
+    });
   }
 
   async read(host: CapacityRow): Promise<void> {
-    this.message.set('');
-    try {
-      await firstValueFrom(this.http.post(`${environment.apiUrl}/platform/capacity/${host.hostId}`, {}));
-      this.message.set('Host capacity was read from the Engine.');
-      await this.load();
-    } catch (error) {
-      this.message.set(problemMessage(error, 'The Docker host could not be read.'));
-    }
+    await runBusy(this.busy, `read:${host.hostId}`, async () => {
+      this.feedback.clear();
+      try {
+        await firstValueFrom(this.http.post(`${environment.apiUrl}/platform/capacity/${host.hostId}`, {}));
+        this.feedback.success('Host capacity was read from the Engine.');
+        await this.load();
+      } catch (error) {
+        this.feedback.error(problemMessage(error, 'The Docker host could not be read.'));
+      }
+    });
   }
 
   cpuLabel(millicores: number): string {

@@ -14,6 +14,10 @@ export class PermissionService {
     return this.codes().includes(code);
   }
 
+  hasAny(codes: readonly string[]): boolean {
+    return codes.some((code) => this.codes().includes(code));
+  }
+
   list(): readonly string[] {
     return this.codes();
   }

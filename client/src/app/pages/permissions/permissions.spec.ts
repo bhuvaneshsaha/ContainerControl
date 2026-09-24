@@ -1,6 +1,7 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 
 import { environment } from '../../../environments/environment';
 import { Permissions } from './permissions';
@@ -12,7 +13,7 @@ describe('Permissions', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [Permissions],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(Permissions);
@@ -23,7 +24,10 @@ describe('Permissions', () => {
     http.expectOne(`${environment.apiUrl}/me/permissions`).flush({ permissions: ['apps.read'] });
     await fixture.whenStable();
     fixture.detectChanges();
-    expect(fixture.nativeElement.textContent).toContain('apps.read');
+    const text = fixture.nativeElement.textContent as string;
+    expect(text).toContain('apps.read');
+    expect(text).toContain('Read applications');
+    expect(text).toContain('Applications');
   });
 
   it('shows one sentence when the account has no permissions', async () => {

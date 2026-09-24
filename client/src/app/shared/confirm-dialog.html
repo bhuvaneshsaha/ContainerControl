@@ -1,0 +1,21 @@
+@if (confirm.request(); as request) {
+  <div class="confirm-backdrop">
+    <div
+      class="confirm-panel"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="confirm-title"
+      aria-describedby="confirm-body"
+    >
+      <h2 id="confirm-title">{{ request.title }}</h2>
+      <p id="confirm-body">{{ request.body }}</p>
+      @if (request.irreversible) {
+        <p class="confirm-warning">This cannot be undone.</p>
+      }
+      <div class="confirm-actions">
+        <button #cancel type="button" (click)="confirm.answer(false)">{{ request.cancelLabel }}</button>
+        <button type="button" (click)="confirm.answer(true)">{{ request.confirmLabel }}</button>
+      </div>
+    </div>
+  </div>
+}

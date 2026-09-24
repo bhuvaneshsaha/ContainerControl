@@ -47,7 +47,7 @@ Created only when `ASPNETCORE_ENVIRONMENT` is `Development`. Do not use these ac
 | `admin@localhost` | `Dev-Admin-Passw0rd!` | Platform administrator (every catalog code) |
 | `developer@localhost` | `Dev-Developer-Passw0rd!` | Developer (no `platform.hosts.manage`) |
 
-Sign in at `http://localhost:4200/sign-in`. The Permissions page lists codes from `GET /me/permissions`. After a role change, sign in again so the cookie picks up the new codes.
+Sign in at `http://localhost:4200/sign-in`. After sign-in the app opens Applications when the account has `apps.read`, otherwise the first page that account can open. My access (`/permissions`) lists the same codes from `GET /me/permissions` with catalog names. A link to a page the account cannot open returns to that home and names the missing permission. After a role change, sign in again so the cookie picks up the new codes.
 
 ### First production administrator
 

@@ -15,5 +15,7 @@ describe('PermissionService', () => {
 
     expect(service.hasPermission('apps.read')).toBe(true);
     expect(service.hasPermission('platform.hosts.manage')).toBe(false);
+    expect(service.hasAny(['platform.hosts.manage', 'apps.write'])).toBe(true);
+    expect(service.hasAny(['platform.hosts.manage'])).toBe(false);
   });
 });
