@@ -4,8 +4,14 @@
     <nav aria-label="Primary">
       <a routerLink="/permissions">Permissions</a>
       <a *appHasPermission="'apps.read'" routerLink="/apps">Applications</a>
-      <a *appHasPermission="'access.users.manage'" routerLink="/access">Users</a>
+      @if (canOpenAccess()) {
+        <a routerLink="/access">Access</a>
+      }
       <a *appHasPermission="'platform.hosts.manage'" routerLink="/hosts">Hosts</a>
+      @if (canOpenCapacity()) {
+        <a routerLink="/capacity">Capacity</a>
+      }
+      <a *appHasPermission="'registries.read'" routerLink="/registries">Registries</a>
       <a *appHasPermission="'edge.dns.manage'" routerLink="/domains">Domains</a>
       <a *appHasPermission="'access.tokens.manage'" routerLink="/tokens">Tokens</a>
     </nav>

@@ -1,0 +1,78 @@
+import { HttpClient } from '@angular/common/http';
+import { Component, inject, signal } from '@angular/core';
+import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { firstValueFrom } from 'rxjs';
+
+import { environment } from '../../../environments/environment';
+import { problemMessage } from '../../core/problem-message';
+import { HasPermission } from '../../shared/has-permission';
+
+interface RegistryResponse {
+  id: string;
+  name: string;
+  kind: string;
+  server: string;
+  environment: string;
+}
+
+interface RegistryListResponse {
+  registries: RegistryResponse[];
+}
+
+@Component({
+  selector: 'app-registries',
+  imports: [ReactiveFormsModule, HasPermission],
+  templateUrl: './registries.html',
+})
+export class Registries {
+  private readonly http = inject(HttpClient);
+
+  readonly kinds = ['Acr', 'Ecr', 'DockerHub', 'Harbor'] as const;
+  readonly status = signal<'loading' | 'ready' | 'error'>('loading');
+  readonly message = signal('');
+  readonly registries = signal<readonly RegistryResponse[]>([]);
+  readonly form = new FormGroup({
+    name: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
+    kind: new FormControl('Harbor', { nonNullable: true, validators: [Validators.required] }),
+    server: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
+    environment: new FormControl('dev', { nonNullable: true, validators: [Validators.required] }),
+    username: new FormControl('', { nonNullable: true }),
+    password: new FormControl('', { nonNullable: true }),
+    accessKeyId: new FormControl('', { nonNullable: true }),
+    secretAccessKey: new FormControl('', { nonNullable: true }),
+  });
+
+  constructor() {
+    void this.load();
+  }
+
+  async load(): Promise<void> {
+    this.status.set('loading');
+    try {
+      const response = await firstValueFrom(this.http.get<RegistryListResponse>(`${environment.apiUrl}/registries`));
+      this.registries.set(response.registries);
+      this.status.set('ready');
+    } catch {
+      this.status.set('error');
+    }
+  }
+
+  async save(): Promise<void> {
+    this.message.set('');
+    if (this.form.invalid) {
+      this.message.set('Enter a name, type, and host.');
+      return;
+    }
+
+    const value = this.form.getRawValue();
+    try {
+      await firstValueFrom(this.http.post(`${environment.apiUrl}/registries`, value));
+      this.form.controls.password.setValue('');
+      this.form.controls.secretAccessKey.setValue('');
+      this.message.set('The registry connection was saved. The password is not shown again.');
+      await this.load();
+    } catch (error) {
+      this.message.set(problemMessage(error, 'The registry could not be saved.'));
+    }
+  }
+}

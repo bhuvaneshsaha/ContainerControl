@@ -1,3 +1,5 @@
+using ContainerControl.Modules.Access.Infrastructure.Auditing;
+
 namespace ContainerControl.Modules.Access.Infrastructure.Http;
 
 public sealed record CsrfTokenResponse(string? Token);
@@ -39,3 +41,11 @@ public sealed record AddTeamMemberRequest(Guid? UserId);
 public sealed record IssueTokenRequest(string? Name);
 
 public sealed record IssueTokenResponse(Guid Id, string Token);
+
+public sealed record AuditListResponse(IReadOnlyList<AuditRow> Entries);
+
+public sealed record BreakGlassRequest(Guid? UserId, string? PermissionCode, int? Minutes);
+
+public sealed record BreakGlassResponse(Guid Id, Guid UserId, string PermissionCode, DateTimeOffset ExpiresAtUtc);
+
+public sealed record BreakGlassListResponse(IReadOnlyList<BreakGlassResponse> Grants, IReadOnlyList<PermissionCatalogItem> Permissions);

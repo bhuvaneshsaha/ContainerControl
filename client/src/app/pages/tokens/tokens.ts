@@ -4,6 +4,7 @@ import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angula
 import { firstValueFrom } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
+import { problemMessage } from '../../core/problem-message';
 
 @Component({
   selector: 'app-tokens',
@@ -33,8 +34,8 @@ export class Tokens {
       );
       this.token.set(response.token);
       this.form.controls.name.setValue('');
-    } catch {
-      this.message.set('The API token could not be issued.');
+    } catch (error) {
+      this.message.set(problemMessage(error, 'The API token could not be issued.'));
     }
   }
 }

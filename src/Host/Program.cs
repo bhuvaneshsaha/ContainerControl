@@ -12,6 +12,8 @@ using ContainerControl.Modules.Edge.Http;
 using ContainerControl.Modules.Platform;
 using ContainerControl.Modules.Platform.Http;
 using ContainerControl.Modules.Registries;
+using ContainerControl.Modules.Registries.Connections;
+using ContainerControl.Modules.Registries.Http;
 using ContainerControl.Modules.Runtime;
 using ContainerControl.Modules.Runtime.Http;
 using ContainerControl.SharedKernel.Correlation;
@@ -46,6 +48,7 @@ builder.Services.AddDeliveryModule(builder.Configuration);
 builder.Services.AddEdgeModule(builder.Configuration);
 builder.Services.AddRuntimeModule(builder.Configuration);
 builder.Services.AddHostedService<DatabaseInitializer>();
+builder.Services.AddHostedService<EcrTokenRefresh>();
 builder.Services.AddExceptionHandler<UnhandledExceptionHandler>();
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
@@ -124,6 +127,7 @@ app.MapApplicationEndpoints();
 app.MapEdgeEndpoints();
 app.MapDeliveryEndpoints();
 app.MapRuntimeEndpoints();
+app.MapRegistryEndpoints();
 
 app.Run();
 

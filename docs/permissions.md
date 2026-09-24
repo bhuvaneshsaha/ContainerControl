@@ -2,7 +2,7 @@
 
 Operators compose roles from these codes. The API and the Angular app check the code. They do not check a role name. Identity's built-in role table is not the authorization model.
 
-A new product capability needs a new code in `PermissionCatalog` and a check at the endpoint. A new role is a row, not a code change. After a role change, the user signs in again so the cookie picks up the new codes.
+A new product capability needs a new code in `PermissionCatalog` and a check at the endpoint. A new role is a row, not a code change. After a role change, the user signs in again so the cookie picks up the new codes. A break-glass grant is not copied onto that cookie. The permission check reads an unexpired grant on each call, and `/auth/session` includes it. The grant lasts 5 to 60 minutes.
 
 | Code | Module |
 | --- | --- |
@@ -33,7 +33,7 @@ A new product capability needs a new code in `PermissionCatalog` and a check at 
 | `runtime.stats.read` | Runtime |
 | `runtime.control` | Runtime |
 
-`GET /permissions` returns the catalog for a caller with `access.roles.manage`. `GET /me/permissions` returns the signed-in user's codes. Role create, update, and delete use `access.roles.manage`. User create, disable, and role assignment use `access.users.manage`.
+`GET /permissions` returns the catalog for a caller with `access.roles.manage`. `GET /me/permissions` returns the signed-in user's codes. Role create, update, and delete use `access.roles.manage`. User create, disable, and role assignment use `access.users.manage`. `deploy.approve` accepts a deploy that is waiting. The Applications page shows that action only for that code. `access.audit.read` calls `GET /access/audit`. `access.roles.manage` edits roles from the catalog checkboxes on the Access page. `access.breakglass.grant` calls `POST /access/break-glass`. That writes an audit row and does not open a shell or the Docker socket.
 
 Development sample roles, created only when `ASPNETCORE_ENVIRONMENT` is `Development`:
 

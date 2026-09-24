@@ -16,6 +16,10 @@ export const authGuard: CanActivateFn = async () => {
 };
 
 export function permissionGuard(permission: string): CanActivateFn {
+  return permissionGuardAny([permission]);
+}
+
+export function permissionGuardAny(required: readonly string[]): CanActivateFn {
   return async () => {
     const auth = inject(AuthService);
     const permissions = inject(PermissionService);
@@ -27,6 +31,8 @@ export function permissionGuard(permission: string): CanActivateFn {
       }
     }
 
-    return permissions.hasPermission(permission) ? true : router.createUrlTree(['/permissions']);
+    return required.some((permission) => permissions.hasPermission(permission))
+      ? true
+      : router.createUrlTree(['/permissions']);
   };
 }

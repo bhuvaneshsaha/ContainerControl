@@ -6,6 +6,13 @@ public sealed record EngineVersion(string Version, string ApiVersion);
 
 public sealed record EngineContainer(string Id, string Name, bool Running, string? IpAddress);
 
+public sealed record ContainerHealthcheck(
+    IReadOnlyList<string> Test,
+    TimeSpan Interval,
+    TimeSpan Timeout,
+    TimeSpan StartPeriod,
+    int Retries);
+
 public sealed record ContainerPlan(
     string Name,
     string Image,
@@ -17,7 +24,10 @@ public sealed record ContainerPlan(
     IReadOnlyList<string> ExtraNetworks,
     IReadOnlyList<string> Binds,
     IReadOnlyDictionary<string, string> PublishedPorts,
-    string RestartPolicy);
+    string RestartPolicy,
+    ContainerHealthcheck? Healthcheck = null,
+    long NanoCpus = 0,
+    long MemoryLimit = 0);
 
 public interface IDockerEngine
 {
@@ -29,7 +39,7 @@ public interface IDockerEngine
 
     Task RemoveNetworkAsync(DockerEndpoint endpoint, string name, CancellationToken cancellationToken);
 
-    Task PullImageAsync(DockerEndpoint endpoint, string image, CancellationToken cancellationToken);
+    Task PullImageAsync(DockerEndpoint endpoint, string image, ImagePullAuth? auth, CancellationToken cancellationToken);
 
     Task<string> CreateContainerAsync(DockerEndpoint endpoint, ContainerPlan plan, CancellationToken cancellationToken);
 
@@ -58,6 +68,13 @@ public interface IDockerEngine
         int tail,
         CancellationToken cancellationToken);
 
+    Task FollowLogsAsync(
+        DockerEndpoint endpoint,
+        string containerId,
+        int tail,
+        IProgress<string> progress,
+        CancellationToken cancellationToken);
+
     Task<ContainerSample> ReadStatsAsync(
         DockerEndpoint endpoint,
         string containerId,
@@ -67,6 +84,17 @@ public interface IDockerEngine
         DockerEndpoint endpoint,
         string name,
         CancellationToken cancellationToken);
+
+    Task<string?> ReadHealthStatusAsync(
+        DockerEndpoint endpoint,
+        string containerId,
+        CancellationToken cancellationToken);
+
+    Task<HostCapacity> ReadCapacityAsync(DockerEndpoint endpoint, CancellationToken cancellationToken);
 }
+
+public sealed record HostCapacity(long CpuCount, long MemoryBytes, long? StorageBytes);
+
+public sealed record ImagePullAuth(string Server, string Username, string Password);
 
 public sealed record ContainerSample(double CpuPercent, long MemoryBytes);

@@ -41,5 +41,7 @@ public class PermissionCatalogTests
         var actual = PermissionCatalog.All.Select(permission => permission.Code).ToArray();
         Assert.Equal(expected.OrderBy(code => code), actual.OrderBy(code => code));
         Assert.Equal(PermissionCatalog.PlatformHostsManage, PlatformPermissions.HostsManage);
+        Assert.Equal(PermissionCatalog.PlatformQuotasManage, PlatformPermissions.QuotasManage);
+        Assert.Equal(PermissionCatalog.PlatformCapacityRead, PlatformPermissions.CapacityRead);
     }
 }

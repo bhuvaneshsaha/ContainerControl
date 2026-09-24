@@ -1,18 +1,23 @@
-import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { Component, inject, signal } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { HubConnection } from '@microsoft/signalr';
 import { firstValueFrom } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
 import { AppListResponse, AppResponse, HostListResponse, SecretListResponse, SecretResponse, TeamListResponse } from '../../core/api-models';
+import { appendLogLine, startLogTail } from '../../core/log-tail';
+import { problemMessage } from '../../core/problem-message';
+import { HasPermission } from '../../shared/has-permission';
 
 @Component({
   selector: 'app-apps',
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, HasPermission],
   templateUrl: './apps.html',
 })
 export class Apps {
   private readonly http = inject(HttpClient);
+  private logConnection: HubConnection | null = null;
 
   readonly status = signal<'loading' | 'ready' | 'error'>('loading');
   readonly message = signal('');
@@ -36,6 +41,7 @@ export class Apps {
     internalPort: new FormControl('', { nonNullable: true }),
     hostname: new FormControl('', { nonNullable: true }),
     exposed: new FormControl(false, { nonNullable: true }),
+    requireApproval: new FormControl(false, { nonNullable: true }),
   });
 
   constructor() {
@@ -75,6 +81,7 @@ export class Apps {
           hostname: value.hostname || null,
           image: null,
           composeYaml: value.composeYaml,
+          requiresApproval: value.environment === 'prod' || value.requireApproval,
         }),
       );
       await this.load();
@@ -144,7 +151,7 @@ export class Apps {
     }
   }
 
-  async act(app: AppResponse, action: 'deploy' | 'start' | 'stop' | 'restart' | 'rollback'): Promise<void> {
+  async act(app: AppResponse, action: 'deploy' | 'approve' | 'start' | 'stop' | 'restart' | 'rollback'): Promise<void> {
     this.message.set('');
     try {
       await firstValueFrom(this.http.post(`${environment.apiUrl}/apps/${app.id}/${action}`, {}));
@@ -154,14 +161,34 @@ export class Apps {
     }
   }
 
+  async live(app: AppResponse): Promise<void> {
+    this.detail.set('');
+    try {
+      await this.logConnection?.stop();
+      const csrf = await firstValueFrom(
+        this.http.get<{ token?: string }>(`${environment.apiUrl}/auth/csrf`),
+      );
+      if (!csrf.token) {
+        this.detail.set('The log stream could not be started.');
+        return;
+      }
+
+      this.logConnection = await startLogTail(app.id, csrf.token, (line) => {
+        this.detail.set(appendLogLine(this.detail(), line));
+      });
+    } catch (error) {
+      this.detail.set(problemMessage(error, 'The log stream could not be started.'));
+    }
+  }
+
   async logs(app: AppResponse): Promise<void> {
     try {
       const response = await firstValueFrom(
         this.http.get<{ text: string }>(`${environment.apiUrl}/apps/${app.id}/logs`),
       );
       this.detail.set(response.text || 'This application has no log output yet.');
-    } catch {
-      this.detail.set('Logs could not be loaded.');
+    } catch (error) {
+      this.detail.set(problemMessage(error, 'Logs could not be loaded.'));
     }
   }
 
@@ -176,18 +203,8 @@ export class Apps {
         response.services.map((item) => `${item.service}: CPU ${item.cpuPercent}%, memory ${item.memoryBytes} bytes`).join('\n') ||
           'No running services returned stats.',
       );
-    } catch {
-      this.detail.set('Stats could not be loaded.');
+    } catch (error) {
+      this.detail.set(problemMessage(error, 'Stats could not be loaded.'));
     }
   }
-}
-
-function problemMessage(error: unknown, fallback: string): string {
-  if (!(error instanceof HttpErrorResponse) || !error.error || typeof error.error !== 'object') {
-    return fallback;
-  }
-
-  const body = error.error as { title?: string; detail?: string; errors?: Record<string, string[]> };
-  const field = body.errors && Object.values(body.errors).flat().find((item) => item.length > 0);
-  return field || body.detail || body.title || fallback;
 }

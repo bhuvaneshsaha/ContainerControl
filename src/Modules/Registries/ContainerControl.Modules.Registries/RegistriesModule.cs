@@ -1,3 +1,4 @@
+using ContainerControl.Modules.Registries.Connections;
 using ContainerControl.Modules.Registries.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -6,7 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace ContainerControl.Modules.Registries;
 
 /// <summary>
-/// Registry connections. No registry calls in this slice.
+/// Registry connections for Acr, Ecr, DockerHub, and Harbor. Credential values stay in Infisical.
 /// </summary>
 public static class RegistriesModule
 {
@@ -26,6 +27,10 @@ public static class RegistriesModule
                 npgsql.MigrationsHistoryTable("__EFMigrationsHistory", SchemaName);
                 npgsql.MigrationsAssembly(typeof(RegistriesDbContext).Assembly.GetName().Name);
             }));
+        services.AddSingleton<EcrAuthorizer>();
+        services.AddScoped<RegistryAdmin>();
+        services.AddScoped<RegistryLogin>();
+        services.AddScoped<IRegistryLogin>(provider => provider.GetRequiredService<RegistryLogin>());
         return services;
     }
 }

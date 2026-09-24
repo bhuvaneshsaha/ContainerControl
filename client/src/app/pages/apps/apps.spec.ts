@@ -4,6 +4,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { environment } from '../../../environments/environment';
 import { AppResponse } from '../../core/api-models';
+import { PermissionService } from '../../core/permissions';
 import { Apps } from './apps';
 
 describe('Apps', () => {
@@ -42,6 +43,7 @@ describe('Apps', () => {
       status: 'registered',
       hostname: 'http://nginx.apps.example.com/',
       exposed: false,
+      requiresApproval: false,
     };
 
     const pending = fixture.componentInstance.act(app, 'deploy');
@@ -56,5 +58,29 @@ describe('Apps', () => {
     expect(fixture.componentInstance.message()).toBe(
       "The hostname 'nginx.apps.example.com' is not under an allowed domain.",
     );
+  });
+
+  it('shows Approve only for a pending app when the caller has deploy.approve', async () => {
+    const app: AppResponse = {
+      id: '97f94c8a-3d8e-49ee-9397-2a358eb9a636',
+      teamId: 'team',
+      hostId: 'host',
+      name: 'welcome',
+      environment: 'prod',
+      image: null,
+      status: 'pending-approval',
+      hostname: null,
+      exposed: false,
+      requiresApproval: true,
+    };
+    fixture.componentInstance.status.set('ready');
+    fixture.componentInstance.apps.set([app]);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).not.toContain('Approve');
+
+    TestBed.inject(PermissionService).setPermissions(['deploy.approve']);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(fixture.nativeElement.textContent).toContain('Approve');
   });
 });

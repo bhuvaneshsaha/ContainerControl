@@ -4,25 +4,25 @@ overview: Build ContainerControl on .NET 10 and Angular 21 as an on-premises mod
 todos:
   - id: adrs
     content: Write ADRs for hosting, Engine API, Infisical, Traefik placement, compose DB policy, and online-only Angular
-    status: pending
+    status: completed
   - id: auth-confirm
     content: Implement ASP.NET Core Identity cookie auth with admin-provisioned users; leave Entra ID linking for a later phase
-    status: pending
+    status: completed
   - id: scaffold
     content: Scaffold the host and Angular app, start PostgreSQL from Compose, and stop until health checks pass
-    status: pending
+    status: completed
   - id: access-platform
     content: Prove Identity login, then permissions, then a Docker Engine ping, then an Infisical secret round-trip, before building deploys
-    status: pending
+    status: completed
   - id: delivery-edge
     content: Prove a single-container deploy and in-app DNS names, then the compose subset, then Traefik hostname routing
-    status: pending
+    status: completed
   - id: runtime-ui
-    content: Prove logs, stats, lifecycle controls, API tokens, and the deploy webhook on the already working deploy path
-    status: pending
+    content: Stats, start/stop/restart, API tokens, the deploy webhook, and the SignalR log tail are in place.
+    status: completed
   - id: harden
-    content: Add tests, threat-model review, local setup scripts, and the production setup guide with Do's and Don'ts
-    status: pending
+    content: Threat-model notes are in docs/threat-model.md. The production setup guide lists the manual steps the product still cannot do.
+    status: completed
 isProject: false
 ---
 

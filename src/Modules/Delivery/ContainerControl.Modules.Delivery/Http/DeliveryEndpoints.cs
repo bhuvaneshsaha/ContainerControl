@@ -27,7 +27,7 @@ public static class DeliveryEndpoints
             .WithTags("Delivery");
 
         endpoints.MapPost("/apps/{appId:guid}/approve", async (Guid appId, HttpContext http, DeployService deploy, CancellationToken cancellationToken) =>
-                ToResult(await deploy.DeployAsync(appId, UserId(http), approved: true, cancellationToken)))
+                ToResult(await deploy.DeployAsync(appId, UserId(http), approved: true, cancellationToken, requireMembership: false)))
             .RequirePermission(PermissionCatalog.DeployApprove)
             .WithName("ApproveDeploy")
             .WithTags("Delivery");

@@ -29,6 +29,8 @@
   <label for="app-hostname">Hostname</label>
   <input id="app-hostname" formControlName="hostname" />
   <label for="app-exposed"><input id="app-exposed" type="checkbox" formControlName="exposed" /> Exposed</label>
+  <label for="app-approval"><input id="app-approval" type="checkbox" formControlName="requireApproval" /> Require approval</label>
+  <p>Production stays pending until someone with deploy approval accepts it.</p>
   <button type="submit">Save application</button>
 </form>
 @if (message()) {
@@ -46,12 +48,16 @@
       <li>
         {{ app.name }} ({{ app.environment }}) {{ app.status }}
         <button type="button" (click)="act(app, 'deploy')">Deploy</button>
+        @if (app.status === 'pending-approval') {
+          <button type="button" *appHasPermission="'deploy.approve'" (click)="act(app, 'approve')">Approve</button>
+        }
         <button type="button" (click)="act(app, 'start')">Start</button>
         <button type="button" (click)="act(app, 'stop')">Stop</button>
         <button type="button" (click)="act(app, 'restart')">Restart</button>
         <button type="button" (click)="act(app, 'rollback')">Rollback</button>
         <button type="button" (click)="openSecrets(app)">Secrets</button>
-        <button type="button" (click)="logs(app)">Logs</button>
+        <button type="button" *appHasPermission="'runtime.logs.read'" (click)="logs(app)">Logs</button>
+        <button type="button" *appHasPermission="'runtime.logs.read'" (click)="live(app)">Live logs</button>
         <button type="button" (click)="stats(app)">Stats</button>
       </li>
     }

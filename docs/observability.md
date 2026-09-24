@@ -14,6 +14,8 @@ Health:
 - `GET /health/live` — process only.
 - `GET /health/ready` — PostgreSQL. A down database fails readiness and does not fail liveness.
 
+Application log output is not written to the control-plane log. `GET /apps/{id}/logs` returns a one-shot tail. Live lines use the SignalR hub `/hubs/logs`: the client calls `Tail` and receives `log` events. That stream stops when the browser disconnects. There is no long-term log store.
+
 The local collector is the Compose profile `observability`. `scripts/dev-setup` does not start it.
 
 ```bash

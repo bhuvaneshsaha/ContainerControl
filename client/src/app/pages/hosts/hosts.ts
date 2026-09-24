@@ -1,10 +1,11 @@
-import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { Component, inject, signal } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
 import { HostListResponse, HostSummary } from '../../core/api-models';
+import { problemMessage } from '../../core/problem-message';
 
 @Component({
   selector: 'app-hosts',
@@ -78,14 +79,4 @@ export class Hosts {
       this.message.set(problemMessage(error, 'The Docker host could not be prepared.'));
     }
   }
-}
-
-function problemMessage(error: unknown, fallback: string): string {
-  if (!(error instanceof HttpErrorResponse) || !error.error || typeof error.error !== 'object') {
-    return fallback;
-  }
-
-  const body = error.error as { title?: string; errors?: Record<string, string[]> };
-  const detail = body.errors && Object.values(body.errors).flat().find((item) => item.length > 0);
-  return detail || body.title || fallback;
 }

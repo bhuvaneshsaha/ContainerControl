@@ -5,6 +5,7 @@ import { firstValueFrom } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
 import { DomainListResponse, DomainResponse } from '../../core/api-models';
+import { problemMessage } from '../../core/problem-message';
 
 @Component({
   selector: 'app-domains',
@@ -52,8 +53,8 @@ export class Domains {
       );
       this.form.controls.name.setValue('');
       await this.load();
-    } catch {
-      this.message.set('The domain could not be saved.');
+    } catch (error) {
+      this.message.set(problemMessage(error, 'The domain could not be saved.'));
     }
   }
 }

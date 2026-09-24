@@ -1,4 +1,5 @@
 using ContainerControl.Modules.Platform.Hosts;
+using ContainerControl.Modules.Platform.Quotas;
 using ContainerControl.SharedKernel.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -16,9 +17,21 @@ public sealed record RegisterHostResponse(Guid Id);
 
 public sealed record PingHostResponse(string EngineVersion);
 
+public sealed record QuotaResponse(Guid TeamId, long CpuMillicores, long MemoryBytes, long StorageBytes);
+
+public sealed record QuotaListResponse(IReadOnlyList<QuotaResponse> Quotas);
+
+public sealed record SaveQuotaRequest(long? CpuMillicores, long? MemoryBytes, long? StorageBytes);
+
+public sealed record CapacityListResponse(IReadOnlyList<CapacityRow> Hosts);
+
 public static class PlatformPermissions
 {
     public const string HostsManage = "platform.hosts.manage";
+
+    public const string QuotasManage = "platform.quotas.manage";
+
+    public const string CapacityRead = "platform.capacity.read";
 }
 
 public static class PlatformEndpoints
@@ -95,7 +108,78 @@ public static class PlatformEndpoints
             .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status502BadGateway);
 
+        MapQuotaEndpoints(endpoints);
         return endpoints;
+    }
+
+    private static void MapQuotaEndpoints(IEndpointRouteBuilder endpoints)
+    {
+        endpoints.MapGet("/platform/quotas", async (QuotaAdmin quotas, CancellationToken cancellationToken) =>
+            {
+                var list = await quotas.ListAsync(cancellationToken);
+                return Results.Ok(new QuotaListResponse(list.Select(quota => new QuotaResponse(
+                    quota.TeamId,
+                    quota.CpuMillicores,
+                    quota.MemoryBytes,
+                    quota.StorageBytes)).ToArray()));
+            })
+            .RequirePermission(PlatformPermissions.QuotasManage)
+            .WithName("ListTeamQuotas")
+            .WithTags("Platform");
+
+        endpoints.MapPut("/platform/quotas/{teamId:guid}", async (
+                Guid teamId,
+                SaveQuotaRequest? request,
+                QuotaAdmin quotas,
+                CancellationToken cancellationToken) =>
+            {
+                var result = await quotas.SaveAsync(
+                    teamId,
+                    request?.CpuMillicores ?? 0,
+                    request?.MemoryBytes ?? 0,
+                    request?.StorageBytes ?? 0,
+                    cancellationToken);
+                if (!result.Ok)
+                {
+                    return Results.ValidationProblem(new Dictionary<string, string[]>
+                    {
+                        ["quota"] = [result.Error ?? "The quota was not saved."]
+                    });
+                }
+
+                return Results.NoContent();
+            })
+            .RequirePermission(PlatformPermissions.QuotasManage)
+            .WithName("SaveTeamQuota")
+            .WithTags("Platform");
+
+        endpoints.MapGet("/platform/capacity", async (QuotaAdmin quotas, CancellationToken cancellationToken) =>
+            Results.Ok(new CapacityListResponse(await quotas.ListCapacityAsync(cancellationToken))))
+            .RequirePermission(PlatformPermissions.CapacityRead)
+            .WithName("ListHostCapacity")
+            .WithTags("Platform");
+
+        endpoints.MapPost("/platform/capacity/{hostId:guid}", async (
+                Guid hostId,
+                QuotaAdmin quotas,
+                CancellationToken cancellationToken) =>
+            {
+                var result = await quotas.RecordCapacityAsync(hostId, cancellationToken);
+                if (result.Error == "not-found")
+                {
+                    return Results.NotFound();
+                }
+
+                if (!result.Ok)
+                {
+                    return Results.Problem(statusCode: StatusCodes.Status502BadGateway, title: result.Error);
+                }
+
+                return Results.NoContent();
+            })
+            .RequirePermission(PlatformPermissions.CapacityRead)
+            .WithName("RecordHostCapacity")
+            .WithTags("Platform");
     }
 
     private static HostSummary ToSummary(DockerHost host) =>

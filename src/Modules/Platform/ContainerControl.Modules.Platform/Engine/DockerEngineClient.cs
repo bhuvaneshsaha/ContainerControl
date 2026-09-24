@@ -1,3 +1,4 @@
+using ContainerControl.Modules.Platform.Quotas;
 using Docker.DotNet;
 using Docker.DotNet.Models;
 
@@ -10,6 +11,13 @@ public sealed class DockerEngineClient : IDockerEngine
         using var client = Connect(endpoint);
         var version = await client.System.GetVersionAsync(cancellationToken);
         return new EngineVersion(version.Version, version.APIVersion);
+    }
+
+    public async Task<HostCapacity> ReadCapacityAsync(DockerEndpoint endpoint, CancellationToken cancellationToken)
+    {
+        using var client = Connect(endpoint);
+        var info = await client.System.GetSystemInfoAsync(cancellationToken);
+        return new HostCapacity(info.NCPU, info.MemTotal, HostCapacityText.DataSpaceBytes(info.DriverStatus));
     }
 
     public async Task<IReadOnlyList<string>> ListContainerIdsAsync(DockerEndpoint endpoint, CancellationToken cancellationToken)
@@ -63,13 +71,15 @@ public sealed class DockerEngineClient : IDockerEngine
         }
     }
 
-    public async Task PullImageAsync(DockerEndpoint endpoint, string image, CancellationToken cancellationToken)
+    public async Task PullImageAsync(DockerEndpoint endpoint, string image, ImagePullAuth? auth, CancellationToken cancellationToken)
     {
         var (fromImage, tag) = SplitImage(image);
         using var client = Connect(endpoint);
         await client.Images.CreateImageAsync(
             new ImagesCreateParameters { FromImage = fromImage, Tag = tag },
-            null,
+            auth is null
+                ? null
+                : new AuthConfig { Username = auth.Username, Password = auth.Password, ServerAddress = auth.Server },
             new Progress<JSONMessage>(),
             cancellationToken);
     }
@@ -85,13 +95,16 @@ public sealed class DockerEngineClient : IDockerEngine
             Cmd = plan.Command?.ToList(),
             Env = plan.Environment.Select(pair => pair.Key + "=" + pair.Value).ToList(),
             Labels = labels,
+            Healthcheck = ToHealthcheck(plan.Healthcheck),
             HostConfig = new HostConfig
             {
                 Binds = plan.Binds.ToList(),
                 PortBindings = plan.PublishedPorts.ToDictionary(
                     pair => pair.Key,
                     pair => (IList<PortBinding>)new List<PortBinding> { new() { HostPort = pair.Value } }),
-                RestartPolicy = new RestartPolicy { Name = ToRestart(plan.RestartPolicy) }
+                RestartPolicy = new RestartPolicy { Name = ToRestart(plan.RestartPolicy) },
+                NanoCPUs = plan.NanoCpus,
+                Memory = plan.MemoryLimit
             },
             NetworkingConfig = new NetworkingConfig
             {
@@ -223,6 +236,27 @@ public sealed class DockerEngineClient : IDockerEngine
         return stdout + stderr;
     }
 
+    public async Task FollowLogsAsync(
+        DockerEndpoint endpoint,
+        string containerId,
+        int tail,
+        IProgress<string> progress,
+        CancellationToken cancellationToken)
+    {
+        using var client = Connect(endpoint);
+        await client.Containers.GetContainerLogsAsync(
+            containerId,
+            new ContainerLogsParameters
+            {
+                ShowStdout = true,
+                ShowStderr = true,
+                Follow = true,
+                Tail = tail.ToString()
+            },
+            progress,
+            cancellationToken);
+    }
+
     public async Task<ContainerSample> ReadStatsAsync(
         DockerEndpoint endpoint,
         string containerId,
@@ -302,6 +336,33 @@ public sealed class DockerEngineClient : IDockerEngine
             }
         }, cancellationToken);
         return containers.FirstOrDefault(container => container.Names.Any(item => item == "/" + name || item == name))?.ID;
+    }
+
+    public async Task<string?> ReadHealthStatusAsync(
+        DockerEndpoint endpoint,
+        string containerId,
+        CancellationToken cancellationToken)
+    {
+        using var client = Connect(endpoint);
+        var inspect = await client.Containers.InspectContainerAsync(containerId, cancellationToken);
+        return inspect.State?.Health?.Status;
+    }
+
+    private static HealthcheckConfig? ToHealthcheck(ContainerHealthcheck? healthcheck)
+    {
+        if (healthcheck is null)
+        {
+            return null;
+        }
+
+        return new HealthcheckConfig
+        {
+            Test = healthcheck.Test.ToList(),
+            Interval = healthcheck.Interval,
+            Timeout = healthcheck.Timeout,
+            StartPeriod = (long)healthcheck.StartPeriod.TotalMilliseconds * 1_000_000L,
+            Retries = healthcheck.Retries
+        };
     }
 
     private static DockerClient Connect(DockerEndpoint endpoint)

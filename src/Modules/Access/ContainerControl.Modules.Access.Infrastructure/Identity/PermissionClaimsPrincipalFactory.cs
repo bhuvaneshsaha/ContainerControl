@@ -28,7 +28,7 @@ public sealed class PermissionClaimsPrincipalFactory : UserClaimsPrincipalFactor
             identity.AddClaim(new Claim("display_name", user.DisplayName));
         }
 
-        var codes = await _permissions.GetEffectivePermissionCodesAsync(user.Id, CancellationToken.None);
+        var codes = await _permissions.GetAssignedPermissionCodesAsync(user.Id, CancellationToken.None);
         foreach (var code in codes)
         {
             identity.AddClaim(new Claim(PermissionPolicy.ClaimType, code));

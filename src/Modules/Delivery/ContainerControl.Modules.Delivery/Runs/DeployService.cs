@@ -8,9 +8,12 @@ using ContainerControl.Modules.Delivery.Persistence;
 using ContainerControl.Modules.Edge.Domains;
 using ContainerControl.Modules.Platform.Engine;
 using ContainerControl.Modules.Platform.Hosts;
+using ContainerControl.Modules.Platform.Quotas;
+using ContainerControl.Modules.Registries.Connections;
 using ContainerControl.SharedKernel.CurrentUser;
 using ContainerControl.SharedKernel.Time;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace ContainerControl.Modules.Delivery.Runs;
 
@@ -23,9 +26,12 @@ public sealed class DeployService
     private readonly ISecretCatalog _secretCatalog;
     private readonly ISecretStore _secretStore;
     private readonly IEdgeGateway _edge;
+    private readonly IRegistryLogin _registries;
+    private readonly ITeamQuotaLookup _quotas;
     private readonly ITeamDirectory _teams;
     private readonly ICurrentUser _currentUser;
     private readonly IClock _clock;
+    private readonly ILogger<DeployService> _logger;
 
     public DeployService(
         DeliveryDbContext db,
@@ -35,9 +41,12 @@ public sealed class DeployService
         ISecretCatalog secretCatalog,
         ISecretStore secretStore,
         IEdgeGateway edge,
+        IRegistryLogin registries,
+        ITeamQuotaLookup quotas,
         ITeamDirectory teams,
         ICurrentUser currentUser,
-        IClock clock)
+        IClock clock,
+        ILogger<DeployService> logger)
     {
         _db = db;
         _apps = apps;
@@ -46,14 +55,29 @@ public sealed class DeployService
         _secretCatalog = secretCatalog;
         _secretStore = secretStore;
         _edge = edge;
+        _registries = registries;
+        _quotas = quotas;
         _teams = teams;
         _currentUser = currentUser;
         _clock = clock;
+        _logger = logger;
     }
 
-    public async Task<DeployOutcome> DeployAsync(Guid applicationId, Guid actorUserId, bool approved, CancellationToken cancellationToken)
+    public async Task<DeployOutcome> DeployAsync(
+        Guid applicationId,
+        Guid actorUserId,
+        bool approved,
+        CancellationToken cancellationToken,
+        bool requireMembership = true)
     {
-        if (!await MemberAsync(applicationId, actorUserId, cancellationToken))
+        if (requireMembership)
+        {
+            if (!await MemberAsync(applicationId, actorUserId, cancellationToken))
+            {
+                return DeployOutcome.NotFound();
+            }
+        }
+        else if (await _apps.FindAsync(applicationId, cancellationToken) is null)
         {
             return DeployOutcome.NotFound();
         }
@@ -169,6 +193,16 @@ public sealed class DeployService
             return DeployOutcome.Fail(StatusCodes.Status400BadRequest, string.Join(" ", plan.Errors));
         }
 
+        var quotaMessage = QuotaPolicy.Rejection(
+            await _quotas.FindAsync(app.TeamId, cancellationToken),
+            plan.Services.Select(service => service.Resources).ToArray());
+        if (quotaMessage is not null)
+        {
+            await RecordAsync(app, "rejected", quotaMessage, cancellationToken);
+            await _apps.SetStatusAsync(app.Id, "rejected", cancellationToken);
+            return DeployOutcome.Fail(StatusCodes.Status400BadRequest, quotaMessage);
+        }
+
         var anyExposed = plan.Services.Any(service => service.Exposed) || (string.IsNullOrWhiteSpace(app.ComposeYaml) && app.Exposed);
         var publicHost = PublicHostname.Normalize(app.Hostname);
         if (anyExposed && !await _edge.HostnameAllowedAsync(app.Hostname, cancellationToken))
@@ -191,9 +225,13 @@ public sealed class DeployService
         {
             await ApplyAsync(app, host.Endpoint, plan, anyExposed, publicHost, cancellationToken);
         }
-        catch (Exception exception) when (exception is DockerEngineException or Docker.DotNet.DockerApiException or SecretStoreException or HttpRequestException or IOException)
+        catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            var message = SafeFailure(exception);
+            _logger.LogError(
+                "Deployment failed for {ApplicationId}. {ExceptionType}",
+                app.Id,
+                exception.GetType().Name);
+            var message = DeployFailureText.Describe(exception);
             await RecordAsync(app, "failed", message, cancellationToken);
             await _apps.SetStatusAsync(app.Id, "failed", cancellationToken);
             return DeployOutcome.Fail(StatusCodes.Status502BadGateway, message);
@@ -233,12 +271,13 @@ public sealed class DeployService
             await _engine.RemoveContainerAsync(endpoint, container.Id, cancellationToken);
         }
 
-        var ordered = Order(plan.Services);
+        var ordered = ComposePolicy.StartOrder(plan.Services);
         var secretInputs = secretValues.Select(pair => (pair.Key, pair.Value.Value, pair.Value.Mode)).ToArray();
         foreach (var service in ordered)
         {
             var image = service.Image;
-            await _engine.PullImageAsync(endpoint, image, cancellationToken);
+            var auth = await _registries.ForImageAsync(image, cancellationToken);
+            await _engine.PullImageAsync(endpoint, image, auth, cancellationToken);
             var injected = SecretInjection.Apply(service.Environment, service.Command, secretInputs);
             var exposed = service.Exposed;
             var labels = new Dictionary<string, string>
@@ -269,7 +308,10 @@ public sealed class DeployService
                 extra,
                 [],
                 new Dictionary<string, string>(),
-                "unless-stopped"), cancellationToken);
+                "unless-stopped",
+                service.Healthcheck,
+                service.Resources is null ? 0 : service.Resources.CpuMillicores * 1_000_000L,
+                service.Resources?.MemoryBytes ?? 0), cancellationToken);
             try
             {
                 if (injected.Files.Count > 0)
@@ -280,15 +322,27 @@ public sealed class DeployService
                 }
 
                 await _engine.StartContainerAsync(endpoint, id, cancellationToken);
+                if (service.Healthcheck is not null)
+                {
+                    await HealthcheckGate.WaitAsync(
+                        token => _engine.ReadHealthStatusAsync(endpoint, id, token),
+                        HealthcheckGate.Budget(service.Healthcheck),
+                        TimeSpan.FromSeconds(1),
+                        cancellationToken);
+                }
             }
-            catch
+            catch (Exception)
             {
                 try
                 {
                     await _engine.RemoveContainerAsync(endpoint, id, cancellationToken);
                 }
-                catch (Exception)
+                catch (Exception cleanupError) when (cleanupError is not OperationCanceledException)
                 {
+                    _logger.LogWarning(
+                        "Removing container {ContainerId} after a failed start did not succeed. {ExceptionType}",
+                        id,
+                        cleanupError.GetType().Name);
                 }
 
                 throw;
@@ -369,21 +423,6 @@ public sealed class DeployService
         return await action(app);
     }
 
-    private static IReadOnlyList<PlannedService> Order(IReadOnlyList<PlannedService> services)
-    {
-        var pending = services.ToList();
-        var ordered = new List<PlannedService>();
-        while (pending.Count > 0)
-        {
-            var next = pending.FirstOrDefault(service => service.DependsOn.All(name => ordered.Any(done => done.Name == name)))
-                ?? pending[0];
-            ordered.Add(next);
-            pending.Remove(next);
-        }
-
-        return ordered;
-    }
-
     private static IReadOnlyList<string>? ReadCommand(string? json)
     {
         if (string.IsNullOrWhiteSpace(json))
@@ -392,20 +431,6 @@ public sealed class DeployService
         }
 
         return JsonSerializer.Deserialize<List<string>>(json);
-    }
-
-    private static string SafeFailure(Exception exception)
-    {
-        if (exception is DockerEngineException or SecretStoreException)
-        {
-            var text = exception.Message.ReplaceLineEndings(" ").Trim();
-            if (text.Length is > 0 and <= 300 && !text.Contains('='))
-            {
-                return text;
-            }
-        }
-
-        return "The Engine rejected the deployment.";
     }
 
     private static string ContainerName(Guid appId, string service) =>

@@ -93,6 +93,7 @@ public sealed class WorkloadAdmin : IWorkloadStore, ISecretCatalog
         int? internalPort,
         string? hostname,
         bool exposed,
+        bool requiresApproval,
         CancellationToken cancellationToken)
     {
         if (!await CanSeeAsync(teamId, cancellationToken))
@@ -123,7 +124,7 @@ public sealed class WorkloadAdmin : IWorkloadStore, ISecretCatalog
             InternalPort = internalPort,
             Hostname = string.IsNullOrWhiteSpace(hostname) ? null : hostname.Trim().ToLowerInvariant(),
             Exposed = exposed,
-            RequiresApproval = environment == "prod",
+            RequiresApproval = ApprovalPolicy.Required(environment, requiresApproval),
             Status = "registered",
             CreatedAtUtc = _clock.UtcNow
         };
@@ -141,6 +142,7 @@ public sealed class WorkloadAdmin : IWorkloadStore, ISecretCatalog
         int? internalPort,
         string? hostname,
         bool exposed,
+        bool requiresApproval,
         CancellationToken cancellationToken)
     {
         var app = await _db.Apps.SingleOrDefaultAsync(item => item.Id == id, cancellationToken);
@@ -160,6 +162,7 @@ public sealed class WorkloadAdmin : IWorkloadStore, ISecretCatalog
         app.InternalPort = internalPort;
         app.Hostname = string.IsNullOrWhiteSpace(hostname) ? null : hostname.Trim().ToLowerInvariant();
         app.Exposed = exposed;
+        app.RequiresApproval = ApprovalPolicy.Required(app.Environment, requiresApproval);
         await _db.SaveChangesAsync(cancellationToken);
         return (true, null);
     }

@@ -1,0 +1,67 @@
+<h1>Capacity</h1>
+<p>Team quotas count CPU, memory, and the storage each service declares. A deploy is rejected when the sum is over the quota.</p>
+@if (message()) {
+  <p role="alert">{{ message() }}</p>
+}
+<section *appHasPermission="'platform.quotas.manage'">
+  <h2>Team quotas</h2>
+  <form [formGroup]="form" (ngSubmit)="save()">
+    <label for="quota-team">Team id</label>
+    <input id="quota-team" formControlName="teamId" />
+    <label for="quota-cpu">CPU</label>
+    <input id="quota-cpu" type="number" step="0.001" formControlName="cpu" />
+    <label for="quota-memory">Memory (GiB)</label>
+    <input id="quota-memory" type="number" step="0.001" formControlName="memoryGiB" />
+    <label for="quota-storage">Storage (GiB)</label>
+    <input id="quota-storage" type="number" step="0.001" formControlName="storageGiB" />
+    <button type="submit">Save quota</button>
+  </form>
+  @if (quotas().length === 0) {
+    <p>No team quotas are saved yet.</p>
+  } @else {
+    <ul>
+      @for (quota of quotas(); track quota.teamId) {
+        <li>{{ quota.teamId }}: {{ cpuLabel(quota.cpuMillicores) }}, {{ bytesLabel(quota.memoryBytes) }} memory, {{ bytesLabel(quota.storageBytes) }} storage</li>
+      }
+    </ul>
+  }
+</section>
+<section *appHasPermission="'platform.capacity.read'">
+  <h2>Host capacity</h2>
+  @if (status() === 'loading') {
+    <p>Loading capacity.</p>
+  } @else if (status() === 'error') {
+    <p>Capacity could not be loaded.</p>
+  } @else if (hosts().length === 0) {
+    <p>No Docker hosts are registered.</p>
+  } @else {
+    <table>
+      <caption>CPU, memory, and storage reported by each Docker host.</caption>
+      <thead>
+        <tr>
+          <th>Host</th>
+          <th>CPU</th>
+          <th>Memory</th>
+          <th>Storage</th>
+          <th>Read</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (host of hosts(); track host.hostId) {
+          <tr>
+            <td>{{ host.hostName }}</td>
+            <td>{{ host.cpuCount === null ? 'Not read' : host.cpuCount }}</td>
+            <td>{{ host.memoryBytes === null ? 'Not read' : bytesLabel(host.memoryBytes) }}</td>
+            <td>{{ bytesLabel(host.storageBytes) }}</td>
+            <td>
+              @if (host.readAtUtc) {
+                {{ host.readAtUtc }}
+              }
+              <button type="button" (click)="read(host)">Read capacity</button>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
+</section>

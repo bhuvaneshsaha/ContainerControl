@@ -20,6 +20,7 @@ public sealed record AppResponse(
     int? InternalPort,
     string? Hostname,
     bool Exposed,
+    bool RequiresApproval,
     string Status);
 
 public sealed record AppListResponse(IReadOnlyList<AppResponse> Apps);
@@ -34,7 +35,8 @@ public sealed record CreateAppRequest(
     string? ComposeYaml,
     int? InternalPort,
     string? Hostname,
-    bool Exposed);
+    bool Exposed,
+    bool RequiresApproval);
 
 public sealed record SecretResponse(Guid Id, string Name, string Environment, string InjectionMode, string Path);
 
@@ -84,6 +86,7 @@ public static class ApplicationEndpoints
                     request.InternalPort,
                     request.Hostname,
                     request.Exposed,
+                    request.RequiresApproval,
                     cancellationToken);
                 if (!result.Ok || result.Id is null)
                 {
@@ -107,6 +110,7 @@ public static class ApplicationEndpoints
                     request?.InternalPort,
                     request?.Hostname,
                     request?.Exposed ?? false,
+                    request?.RequiresApproval ?? false,
                     cancellationToken);
                 if (result.Error == "not-found")
                 {
@@ -184,5 +188,5 @@ public static class ApplicationEndpoints
     }
 
     private static AppResponse ToResponse(ContainerApp app) =>
-        new(app.Id, app.TeamId, app.HostId, app.Name, app.Environment, app.Image, app.ComposeYaml, app.InternalPort, app.Hostname, app.Exposed, app.Status);
+        new(app.Id, app.TeamId, app.HostId, app.Name, app.Environment, app.Image, app.ComposeYaml, app.InternalPort, app.Hostname, app.Exposed, app.RequiresApproval, app.Status);
 }

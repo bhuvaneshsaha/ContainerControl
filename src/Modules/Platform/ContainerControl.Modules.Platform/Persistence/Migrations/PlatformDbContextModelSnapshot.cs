@@ -63,6 +63,52 @@ namespace ContainerControl.Modules.Platform.Persistence.Migrations
                     b.ToTable("docker_hosts", "platform");
                 });
 
+            modelBuilder.Entity("ContainerControl.Modules.Platform.Quotas.HostCapacityReading", b =>
+                {
+                    b.Property<Guid>("HostId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("CpuCount")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("MemoryBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("ReadAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long?>("StorageBytes")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("HostId");
+
+                    b.ToTable("host_capacity", "platform");
+                });
+
+            modelBuilder.Entity("ContainerControl.Modules.Platform.Quotas.TeamQuota", b =>
+                {
+                    b.Property<Guid>("TeamId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("CpuMillicores")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("MemoryBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("StorageBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("TeamId");
+
+                    b.ToTable("team_quotas", "platform");
+                });
+
             modelBuilder.Entity("ContainerControl.SharedKernel.Persistence.ModuleBoundary", b =>
                 {
                     b.Property<int>("Id")

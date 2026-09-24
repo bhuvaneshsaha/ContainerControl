@@ -1,7 +1,8 @@
 namespace ContainerControl.Modules.Access.Domain.BreakGlass;
 
 /// <summary>
-/// Placeholder for a time-boxed permission grant. Grants are not evaluated in this slice.
+/// A catalog permission granted to one user until <see cref="ExpiresAtUtc"/>.
+/// The permission API evaluates it. The grant does not open a shell or the Docker socket.
 /// </summary>
 public sealed class BreakGlassGrant
 {

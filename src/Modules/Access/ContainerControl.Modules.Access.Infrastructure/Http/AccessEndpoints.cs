@@ -3,6 +3,8 @@ using ContainerControl.Modules.Access.Application.Permissions;
 using ContainerControl.Modules.Access.Application.SignIn;
 using ContainerControl.Modules.Access.Application.Users;
 using ContainerControl.Modules.Access.Domain.Permissions;
+using ContainerControl.Modules.Access.Infrastructure.Auditing;
+using ContainerControl.Modules.Access.Infrastructure.BreakGlass;
 using ContainerControl.Modules.Access.Infrastructure.Roles;
 using ContainerControl.Modules.Access.Infrastructure.Teams;
 using ContainerControl.Modules.Access.Infrastructure.Tokens;
@@ -44,14 +46,14 @@ public static class AccessEndpoints
             .WithTags("Access")
             .WithSummary("Issues the cookie anti-forgery token used by the browser.");
 
-        endpoints.MapGet("/auth/session", (ClaimsPrincipal principal) =>
+        endpoints.MapGet("/auth/session", async (ClaimsPrincipal principal, IPermissionReader reader, CancellationToken cancellationToken) =>
             {
                 if (principal.Identity?.IsAuthenticated != true)
                 {
                     return Results.Ok(new SessionResponse(false, []));
                 }
 
-                return Results.Ok(new SessionResponse(true, ReadPermissions(principal)));
+                return Results.Ok(new SessionResponse(true, await EffectivePermissions(principal, reader, cancellationToken)));
             })
             .AllowAnonymous()
             .WithName("GetSession")
@@ -101,8 +103,8 @@ public static class AccessEndpoints
             .Produces(StatusCodes.Status204NoContent)
             .Produces(StatusCodes.Status401Unauthorized);
 
-        endpoints.MapGet("/me/permissions", (ClaimsPrincipal principal) =>
-                Results.Ok(new CurrentUserPermissionsResponse(ReadPermissions(principal))))
+        endpoints.MapGet("/me/permissions", async (ClaimsPrincipal principal, IPermissionReader reader, CancellationToken cancellationToken) =>
+                Results.Ok(new CurrentUserPermissionsResponse(await EffectivePermissions(principal, reader, cancellationToken))))
             .RequireAuthorization()
             .WithName("GetMyPermissions")
             .WithTags("Access")
@@ -368,6 +370,18 @@ public static class AccessEndpoints
             .WithTags("Access")
             .Produces<IssueTokenResponse>(StatusCodes.Status201Created);
 
+        endpoints.MapGet("/access/audit", async (AuditQuery audit, CancellationToken cancellationToken) =>
+            {
+                var entries = await audit.LatestAsync(cancellationToken);
+                return Results.Ok(new AuditListResponse(entries));
+            })
+            .RequirePermission(PermissionCatalog.AccessAuditRead)
+            .WithName("ListAudit")
+            .WithTags("Access")
+            .Produces<AuditListResponse>()
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
         endpoints.MapDelete("/access/roles/{roleId:guid}", async (
                 Guid roleId,
                 RoleAdminService roles,
@@ -382,7 +396,60 @@ public static class AccessEndpoints
             .Produces(StatusCodes.Status204NoContent)
             .Produces(StatusCodes.Status404NotFound);
 
+        endpoints.MapGet("/access/break-glass", async (BreakGlassAdmin grants, CancellationToken cancellationToken) =>
+            {
+                var active = await grants.ListActiveAsync(cancellationToken);
+                var catalog = PermissionCatalog.All
+                    .Select(permission => new PermissionCatalogItem(permission.Code, permission.DisplayName, permission.Module, permission.Description))
+                    .ToArray();
+                return Results.Ok(new BreakGlassListResponse(
+                    active.Select(grant => new BreakGlassResponse(grant.Id, grant.UserId, grant.PermissionCode, grant.ExpiresAtUtc)).ToArray(),
+                    catalog));
+            })
+            .RequirePermission(PermissionCatalog.AccessBreakGlassGrant)
+            .WithName("ListBreakGlassGrants")
+            .WithTags("Access");
+
+        endpoints.MapPost("/access/break-glass", async (
+                BreakGlassRequest? request,
+                BreakGlassAdmin grants,
+                CancellationToken cancellationToken) =>
+            {
+                var result = await grants.GrantAsync(
+                    request?.UserId ?? Guid.Empty,
+                    request?.PermissionCode,
+                    request?.Minutes ?? 0,
+                    cancellationToken);
+                if (!result.Ok || result.Id is null)
+                {
+                    return Results.ValidationProblem(new Dictionary<string, string[]>
+                    {
+                        ["grant"] = [result.Error ?? "The grant was not saved."]
+                    });
+                }
+
+                return Results.Created($"/access/break-glass/{result.Id}", new { id = result.Id });
+            })
+            .RequirePermission(PermissionCatalog.AccessBreakGlassGrant)
+            .WithName("GrantBreakGlass")
+            .WithTags("Access")
+            .WithSummary("Grants one catalog permission for 5 to 60 minutes. This does not open a shell or the Docker socket.");
+
         return endpoints;
+    }
+
+    private static async Task<string[]> EffectivePermissions(
+        ClaimsPrincipal principal,
+        IPermissionReader reader,
+        CancellationToken cancellationToken)
+    {
+        if (!Guid.TryParse(principal.FindFirstValue(ClaimTypes.NameIdentifier), out var userId))
+        {
+            return ReadPermissions(principal);
+        }
+
+        var codes = await reader.GetEffectivePermissionCodesAsync(userId, cancellationToken);
+        return codes.ToArray();
     }
 
     private static string[] ReadPermissions(ClaimsPrincipal principal) =>
