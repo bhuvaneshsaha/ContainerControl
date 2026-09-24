@@ -85,6 +85,7 @@ public sealed class DockerEngineClient : IDockerEngine
             Cmd = plan.Command?.ToList(),
             Env = plan.Environment.Select(pair => pair.Key + "=" + pair.Value).ToList(),
             Labels = labels,
+            Healthcheck = ToHealthcheck(plan.Healthcheck),
             HostConfig = new HostConfig
             {
                 Binds = plan.Binds.ToList(),
@@ -302,6 +303,33 @@ public sealed class DockerEngineClient : IDockerEngine
             }
         }, cancellationToken);
         return containers.FirstOrDefault(container => container.Names.Any(item => item == "/" + name || item == name))?.ID;
+    }
+
+    public async Task<string?> ReadHealthStatusAsync(
+        DockerEndpoint endpoint,
+        string containerId,
+        CancellationToken cancellationToken)
+    {
+        using var client = Connect(endpoint);
+        var inspect = await client.Containers.InspectContainerAsync(containerId, cancellationToken);
+        return inspect.State?.Health?.Status;
+    }
+
+    private static HealthcheckConfig? ToHealthcheck(ContainerHealthcheck? healthcheck)
+    {
+        if (healthcheck is null)
+        {
+            return null;
+        }
+
+        return new HealthcheckConfig
+        {
+            Test = healthcheck.Test.ToList(),
+            Interval = healthcheck.Interval,
+            Timeout = healthcheck.Timeout,
+            StartPeriod = (long)healthcheck.StartPeriod.TotalMilliseconds * 1_000_000L,
+            Retries = healthcheck.Retries
+        };
     }
 
     private static DockerClient Connect(DockerEndpoint endpoint)

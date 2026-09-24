@@ -7,11 +7,12 @@ Allowed:
 - `image`
 - `command`
 - `environment` for non-secret configuration. A `${SECRET}` or `$SECRET` placeholder is replaced at deploy with the secret of that name for the application's environment. The secret value is not written into the stored compose file.
-- `depends_on`
+- `depends_on`, as a list or a map of service names
 - named volumes
+- `healthcheck` with `test`, `interval`, `timeout`, `retries`, and `start_period`
 - `x-containercontrol.exposed` and `x-containercontrol.port` to mark a service for Traefik
 
-A `healthcheck` key is not rejected. Deploy does not read it and does not wait for the container to become healthy.
+Deploy starts dependency services first. When a service defines a healthcheck, that check is set on the container and the next service waits until the status is healthy. `disable: true` or a `NONE` test skips the wait. A cycle, a missing dependency, or a healthcheck that becomes unhealthy rejects the deploy. The wait is capped at five minutes.
 
 Rejected before any container is created:
 

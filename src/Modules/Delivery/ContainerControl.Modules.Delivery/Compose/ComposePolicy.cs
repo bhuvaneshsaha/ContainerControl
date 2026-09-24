@@ -1,3 +1,4 @@
+using ContainerControl.Modules.Platform.Engine;
 using YamlDotNet.Core;
 using YamlDotNet.RepresentationModel;
 
@@ -10,7 +11,8 @@ public sealed record PlannedService(
     bool Exposed,
     int? Port,
     IReadOnlyDictionary<string, string> Environment,
-    IReadOnlyList<string> DependsOn);
+    IReadOnlyList<string> DependsOn,
+    ContainerHealthcheck? Healthcheck = null);
 
 public sealed record ComposePlan(bool Accepted, IReadOnlyList<string> Errors, IReadOnlyList<PlannedService> Services);
 
@@ -100,6 +102,7 @@ public static class ComposePolicy
                 port = parsedPort;
             }
 
+            var healthcheck = ReadHealthcheck(Child(body, "healthcheck"), name, errors);
             services.Add(new PlannedService(
                 name,
                 image,
@@ -107,7 +110,8 @@ public static class ComposePolicy
                 exposed,
                 port,
                 ReadEnvironment(Child(body, "environment")),
-                ReadDepends(Child(body, "depends_on"))));
+                ReadDepends(Child(body, "depends_on")),
+                healthcheck));
         }
 
         if (services.Count == 0 && errors.Count == 0)
@@ -115,7 +119,44 @@ public static class ComposePolicy
             errors.Add("The compose file has no services.");
         }
 
+        var names = services.Select(service => service.Name).ToHashSet(StringComparer.Ordinal);
+        foreach (var service in services)
+        {
+            foreach (var dependency in service.DependsOn)
+            {
+                if (!names.Contains(dependency))
+                {
+                    errors.Add($"Service '{service.Name}' depends on '{dependency}', which is not in the file.");
+                }
+            }
+        }
+
+        if (errors.Count == 0 && HasCycle(services))
+        {
+            errors.Add("Service dependencies contain a cycle.");
+        }
+
         return new ComposePlan(errors.Count == 0, errors, errors.Count == 0 ? services : []);
+    }
+
+    public static IReadOnlyList<PlannedService> StartOrder(IReadOnlyList<PlannedService> services)
+    {
+        var pending = services.ToList();
+        var ordered = new List<PlannedService>();
+        while (pending.Count > 0)
+        {
+            var nextIndex = pending.FindIndex(service =>
+                service.DependsOn.All(name => ordered.Any(done => done.Name == name)));
+            if (nextIndex < 0)
+            {
+                throw new InvalidOperationException("Service dependencies contain a cycle.");
+            }
+
+            ordered.Add(pending[nextIndex]);
+            pending.RemoveAt(nextIndex);
+        }
+
+        return ordered;
     }
 
     public static bool IsDatabaseImage(string image)
@@ -230,6 +271,166 @@ public static class ComposePolicy
         }
 
         return values;
+    }
+
+    private static ContainerHealthcheck? ReadHealthcheck(YamlNode? node, string service, List<string> errors)
+    {
+        if (node is not YamlMappingNode map)
+        {
+            return null;
+        }
+
+        if (Text(Child(map, "disable")).Equals("true", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var testNode = Child(map, "test");
+        IReadOnlyList<string> test;
+        if (testNode is YamlSequenceNode sequence)
+        {
+            test = sequence.Children.Select(Text).Where(item => item.Length > 0).ToArray();
+        }
+        else
+        {
+            var text = Text(testNode);
+            test = string.IsNullOrWhiteSpace(text) ? [] : ["CMD-SHELL", text];
+        }
+
+        if (test.Count == 0)
+        {
+            errors.Add($"Service '{service}' healthcheck needs a test.");
+            return null;
+        }
+
+        if (test[0].Equals("NONE", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        if (!TryDuration(Text(Child(map, "interval")), TimeSpan.FromSeconds(30), out var interval))
+        {
+            errors.Add($"Service '{service}' healthcheck interval is not a duration.");
+        }
+
+        if (!TryDuration(Text(Child(map, "timeout")), TimeSpan.FromSeconds(30), out var timeout))
+        {
+            errors.Add($"Service '{service}' healthcheck timeout is not a duration.");
+        }
+
+        if (!TryDuration(Text(Child(map, "start_period")), TimeSpan.Zero, out var startPeriod))
+        {
+            errors.Add($"Service '{service}' healthcheck start_period is not a duration.");
+        }
+
+        var retriesText = Text(Child(map, "retries"));
+        var retries = 3;
+        if (!string.IsNullOrWhiteSpace(retriesText) && (!int.TryParse(retriesText, out retries) || retries < 1))
+        {
+            errors.Add($"Service '{service}' healthcheck retries must be a positive number.");
+            retries = 3;
+        }
+
+        return errors.Count == 0
+            ? new ContainerHealthcheck(test, interval, timeout, startPeriod, retries)
+            : null;
+    }
+
+    private static bool TryDuration(string text, TimeSpan fallback, out TimeSpan duration)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            duration = fallback;
+            return true;
+        }
+
+        var total = TimeSpan.Zero;
+        var index = 0;
+        var matched = false;
+        while (index < text.Length)
+        {
+            var start = index;
+            while (index < text.Length && char.IsDigit(text[index]))
+            {
+                index++;
+            }
+
+            if (start == index || !int.TryParse(text[start..index], out var number))
+            {
+                duration = fallback;
+                return false;
+            }
+
+            var unitStart = index;
+            while (index < text.Length && char.IsLetter(text[index]))
+            {
+                index++;
+            }
+
+            if (unitStart == index)
+            {
+                duration = fallback;
+                return false;
+            }
+
+            var unit = text[unitStart..index];
+            var piece = unit switch
+            {
+                "ms" => TimeSpan.FromMilliseconds(number),
+                "s" => TimeSpan.FromSeconds(number),
+                "m" => TimeSpan.FromMinutes(number),
+                "h" => TimeSpan.FromHours(number),
+                _ => TimeSpan.MinValue
+            };
+            if (piece < TimeSpan.Zero)
+            {
+                duration = fallback;
+                return false;
+            }
+
+            total += piece;
+            matched = true;
+        }
+
+        duration = matched ? total : fallback;
+        return matched;
+    }
+
+    private static bool HasCycle(IReadOnlyList<PlannedService> services)
+    {
+        var byName = services.ToDictionary(service => service.Name, StringComparer.Ordinal);
+        var visiting = new HashSet<string>(StringComparer.Ordinal);
+        var visited = new HashSet<string>(StringComparer.Ordinal);
+
+        bool Visit(string name)
+        {
+            if (visited.Contains(name))
+            {
+                return false;
+            }
+
+            if (!visiting.Add(name))
+            {
+                return true;
+            }
+
+            if (byName.TryGetValue(name, out var service))
+            {
+                foreach (var dependency in service.DependsOn)
+                {
+                    if (byName.ContainsKey(dependency) && Visit(dependency))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            visiting.Remove(name);
+            visited.Add(name);
+            return false;
+        }
+
+        return services.Any(service => Visit(service.Name));
     }
 
     private static IReadOnlyList<string> ReadDepends(YamlNode? node)

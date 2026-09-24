@@ -241,7 +241,7 @@ public sealed class DeployService
             await _engine.RemoveContainerAsync(endpoint, container.Id, cancellationToken);
         }
 
-        var ordered = Order(plan.Services);
+        var ordered = ComposePolicy.StartOrder(plan.Services);
         var secretInputs = secretValues.Select(pair => (pair.Key, pair.Value.Value, pair.Value.Mode)).ToArray();
         foreach (var service in ordered)
         {
@@ -277,7 +277,8 @@ public sealed class DeployService
                 extra,
                 [],
                 new Dictionary<string, string>(),
-                "unless-stopped"), cancellationToken);
+                "unless-stopped",
+                service.Healthcheck), cancellationToken);
             try
             {
                 if (injected.Files.Count > 0)
@@ -288,6 +289,14 @@ public sealed class DeployService
                 }
 
                 await _engine.StartContainerAsync(endpoint, id, cancellationToken);
+                if (service.Healthcheck is not null)
+                {
+                    await HealthcheckGate.WaitAsync(
+                        token => _engine.ReadHealthStatusAsync(endpoint, id, token),
+                        HealthcheckGate.Budget(service.Healthcheck),
+                        TimeSpan.FromSeconds(1),
+                        cancellationToken);
+                }
             }
             catch (Exception)
             {
@@ -379,21 +388,6 @@ public sealed class DeployService
         }
 
         return await action(app);
-    }
-
-    private static IReadOnlyList<PlannedService> Order(IReadOnlyList<PlannedService> services)
-    {
-        var pending = services.ToList();
-        var ordered = new List<PlannedService>();
-        while (pending.Count > 0)
-        {
-            var next = pending.FirstOrDefault(service => service.DependsOn.All(name => ordered.Any(done => done.Name == name)))
-                ?? pending[0];
-            ordered.Add(next);
-            pending.Remove(next);
-        }
-
-        return ordered;
     }
 
     private static IReadOnlyList<string>? ReadCommand(string? json)

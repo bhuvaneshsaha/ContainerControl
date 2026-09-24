@@ -6,6 +6,13 @@ public sealed record EngineVersion(string Version, string ApiVersion);
 
 public sealed record EngineContainer(string Id, string Name, bool Running, string? IpAddress);
 
+public sealed record ContainerHealthcheck(
+    IReadOnlyList<string> Test,
+    TimeSpan Interval,
+    TimeSpan Timeout,
+    TimeSpan StartPeriod,
+    int Retries);
+
 public sealed record ContainerPlan(
     string Name,
     string Image,
@@ -17,7 +24,8 @@ public sealed record ContainerPlan(
     IReadOnlyList<string> ExtraNetworks,
     IReadOnlyList<string> Binds,
     IReadOnlyDictionary<string, string> PublishedPorts,
-    string RestartPolicy);
+    string RestartPolicy,
+    ContainerHealthcheck? Healthcheck = null);
 
 public interface IDockerEngine
 {
@@ -66,6 +74,11 @@ public interface IDockerEngine
     Task<string?> FindContainerIdByNameAsync(
         DockerEndpoint endpoint,
         string name,
+        CancellationToken cancellationToken);
+
+    Task<string?> ReadHealthStatusAsync(
+        DockerEndpoint endpoint,
+        string containerId,
         CancellationToken cancellationToken);
 }
 
