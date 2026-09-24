@@ -250,7 +250,7 @@ public sealed class PlatformSliceTests
             var firstWeb = await FindAsync(engine, firstApp.Value, "web");
             var firstCache = await FindAsync(engine, firstApp.Value, "cache");
             var secondCache = await FindAsync(engine, secondApp.Value, "cache");
-            var resolved = await engine.ExecAsync(new DockerEndpoint(EngineEndpoint), firstWeb.Id, ["nslookup", "cache"], CancellationToken.None);
+            var resolved = await engine.ExecAsync(new DockerEndpoint(EngineEndpoint), firstWeb.Id, ["nslookup", "cache."], CancellationToken.None);
             Assert.Contains(firstCache.IpAddress!, resolved, StringComparison.Ordinal);
             Assert.DoesNotContain(secondCache.IpAddress!, resolved, StringComparison.Ordinal);
 
