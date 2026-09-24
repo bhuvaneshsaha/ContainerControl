@@ -20,6 +20,10 @@ The [threat model](threat-model.md) records what the API enforces. Confirm each 
 10. When Let's Encrypt cannot issue a certificate, obtain one from the vendor. Traefik's ACME resolver, controlled by `EDGE_ACME_EMAIL`, covers public hostnames only. The product does not buy or install a commercial certificate for you.
 11. When the Docker host client certificate must change, rotate it on the host and update the Infisical reference the host uses. The product does not rotate that certificate.
 
+## Nested Docker host storage driver
+
+If the Docker host's data root is already an overlay filesystem — a nested VM, or Engine running inside another container — the kernel `overlay2` driver cannot mount another overlay on top. The host operator sets the daemon storage driver to `fuse-overlayfs` and restarts Docker. ContainerControl does not choose or configure that driver. A deploy's storage limit is quota accounting only. It is not sent as a Docker storage option.
+
 ## Steps you finish in ContainerControl
 
 1. Sign in and create real users. Assign roles built from the permission catalog. Check: a developer cannot call `GET /platform/hosts`.

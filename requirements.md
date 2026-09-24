@@ -1,3 +1,5 @@
+> **Historical. Not normative.** These are early planning notes. Shipped behavior is the [README](README.md), the [ADRs](docs/adr), and [production setup](docs/production-setup.md). Do not treat this file as the implementation spec.
+
 # ContainerControl — Internal Platform Notes
 
 Working notes from planning a self-service container hosting platform on Windows Server, replacing per-app VMs.
