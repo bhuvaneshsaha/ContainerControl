@@ -1,19 +1,23 @@
 import { HttpClient } from '@angular/common/http';
 import { Component, inject, signal } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { HubConnection } from '@microsoft/signalr';
 import { firstValueFrom } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
 import { AppListResponse, AppResponse, HostListResponse, SecretListResponse, SecretResponse, TeamListResponse } from '../../core/api-models';
+import { appendLogLine, startLogTail } from '../../core/log-tail';
 import { problemMessage } from '../../core/problem-message';
+import { HasPermission } from '../../shared/has-permission';
 
 @Component({
   selector: 'app-apps',
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, HasPermission],
   templateUrl: './apps.html',
 })
 export class Apps {
   private readonly http = inject(HttpClient);
+  private logConnection: HubConnection | null = null;
 
   readonly status = signal<'loading' | 'ready' | 'error'>('loading');
   readonly message = signal('');
@@ -152,6 +156,26 @@ export class Apps {
       await this.load();
     } catch (error) {
       this.message.set(problemMessage(error, 'The application action could not be completed.'));
+    }
+  }
+
+  async live(app: AppResponse): Promise<void> {
+    this.detail.set('');
+    try {
+      await this.logConnection?.stop();
+      const csrf = await firstValueFrom(
+        this.http.get<{ token?: string }>(`${environment.apiUrl}/auth/csrf`),
+      );
+      if (!csrf.token) {
+        this.detail.set('The log stream could not be started.');
+        return;
+      }
+
+      this.logConnection = await startLogTail(app.id, csrf.token, (line) => {
+        this.detail.set(appendLogLine(this.detail(), line));
+      });
+    } catch (error) {
+      this.detail.set(problemMessage(error, 'The log stream could not be started.'));
     }
   }
 

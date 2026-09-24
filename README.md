@@ -84,7 +84,7 @@ There is no self-registration endpoint.
 - Applications: desired state and secret references. Secret values are written to Infisical and are not stored in PostgreSQL. Deploy places them in the container as environment variables, or as files under `/run/secrets`, and fills `${SECRET}` placeholders in the compose environment and command. Creating a `prod` application sets approval required.
 - Delivery: compose policy, deploy, start, stop, restart, rollback, and the CI webhook. `POST /apps/{id}/deploy` on an approval-required application stays `pending-approval` until `POST /apps/{id}/approve`. A failed deploy is recorded with a short message. That message omits text that looks like a secret assignment. A compose healthcheck is applied on the container, and deploy waits for healthy before starting the services that depend on it.
 - Edge: allowed domains and Traefik labels for an exposed hostname. If prepare cannot reach the Engine, the API returns 502.
-- Runtime: a one-shot log read and container CPU and memory stats. The log call does not stream.
+- Runtime: a one-shot log read, a SignalR tail at `/hubs/logs` (`Tail` sends `log` events from the Engine log API), and container CPU and memory stats. The tail requires `runtime.logs.read` and team membership.
 - Registries: schema placeholder. Image pulls use the Engine's existing registry credentials.
 - Angular: sign-in, permissions, applications, secrets, hosts, domains, users and teams, and tokens. Nav and route guards use permission codes. The Applications page has no Approve action. The Users page assigns an existing role; it does not edit the catalog on a role, and it does not show audit.
 

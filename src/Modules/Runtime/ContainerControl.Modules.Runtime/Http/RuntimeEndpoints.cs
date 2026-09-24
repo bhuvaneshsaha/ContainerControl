@@ -35,6 +35,8 @@ public static class RuntimeEndpoints
             .WithTags("Runtime")
             .Produces<StatsResponse>();
 
+        endpoints.MapHub<LogHub>("/hubs/logs");
+
         return endpoints;
     }
 }

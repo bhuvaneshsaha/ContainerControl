@@ -66,6 +66,13 @@ public interface IDockerEngine
         int tail,
         CancellationToken cancellationToken);
 
+    Task FollowLogsAsync(
+        DockerEndpoint endpoint,
+        string containerId,
+        int tail,
+        IProgress<string> progress,
+        CancellationToken cancellationToken);
+
     Task<ContainerSample> ReadStatsAsync(
         DockerEndpoint endpoint,
         string containerId,

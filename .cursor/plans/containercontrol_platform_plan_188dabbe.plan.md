@@ -18,8 +18,8 @@ todos:
     content: Prove a single-container deploy and in-app DNS names, then the compose subset, then Traefik hostname routing
     status: completed
   - id: runtime-ui
-    content: Stats, start/stop/restart, API tokens, and the deploy webhook are in place. Live SignalR log tail is still outstanding. The log API is a one-shot read.
-    status: pending
+    content: Stats, start/stop/restart, API tokens, the deploy webhook, and the SignalR log tail are in place.
+    status: completed
   - id: harden
     content: Tests, local setup scripts, and the production setup guide exist. Threat-model notes and the guide's remaining manual steps are still outstanding.
     status: pending

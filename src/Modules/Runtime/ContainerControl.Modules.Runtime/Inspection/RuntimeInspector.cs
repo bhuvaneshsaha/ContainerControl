@@ -1,3 +1,4 @@
+using System.Threading.Channels;
 using ContainerControl.Modules.Access.Application.Teams;
 using ContainerControl.Modules.Applications.Workloads;
 using ContainerControl.Modules.Platform.Engine;
@@ -5,6 +6,14 @@ using ContainerControl.Modules.Platform.Hosts;
 using ContainerControl.SharedKernel.CurrentUser;
 
 namespace ContainerControl.Modules.Runtime.Inspection;
+
+public sealed class LogStreamException : Exception
+{
+    public LogStreamException(string message)
+        : base(message)
+    {
+    }
+}
 
 public sealed record ServiceStats(string Service, double CpuPercent, long MemoryBytes);
 
@@ -47,6 +56,54 @@ public sealed class RuntimeInspector
         }
 
         return string.Join("\n", parts);
+    }
+
+    public async Task FollowAsync(Guid applicationId, Func<string, Task> write, CancellationToken cancellationToken)
+    {
+        var located = await LocateAsync(applicationId, cancellationToken);
+        if (located is null)
+        {
+            throw new LogStreamException("The application was not found.");
+        }
+
+        var (endpoint, containers) = located.Value;
+        if (containers.Count == 0)
+        {
+            await write("This application has no log output yet.");
+            return;
+        }
+
+        var channel = Channel.CreateUnbounded<string>(new UnboundedChannelOptions { SingleReader = true });
+        var producers = containers.Select(container => FollowContainerAsync(endpoint, container, channel.Writer, cancellationToken)).ToArray();
+        var completed = Task.WhenAll(producers).ContinueWith(
+            task => channel.Writer.TryComplete(task.IsFaulted ? task.Exception?.GetBaseException() : null),
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+
+        await foreach (var line in channel.Reader.ReadAllAsync(cancellationToken))
+        {
+            await write(line);
+        }
+
+        await completed;
+    }
+
+    private async Task FollowContainerAsync(
+        DockerEndpoint endpoint,
+        EngineContainer container,
+        ChannelWriter<string> writer,
+        CancellationToken cancellationToken)
+    {
+        var name = container.Name.TrimStart('/');
+        writer.TryWrite(name);
+        await _engine.FollowLogsAsync(endpoint, container.Id, 80, new Progress<string>(line =>
+        {
+            if (!string.IsNullOrEmpty(line))
+            {
+                writer.TryWrite(name + " " + line.TrimEnd('\r', '\n'));
+            }
+        }), cancellationToken);
     }
 
     public async Task<IReadOnlyList<ServiceStats>?> StatsAsync(Guid applicationId, CancellationToken cancellationToken)

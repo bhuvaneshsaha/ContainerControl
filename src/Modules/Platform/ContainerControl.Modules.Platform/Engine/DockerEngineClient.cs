@@ -224,6 +224,27 @@ public sealed class DockerEngineClient : IDockerEngine
         return stdout + stderr;
     }
 
+    public async Task FollowLogsAsync(
+        DockerEndpoint endpoint,
+        string containerId,
+        int tail,
+        IProgress<string> progress,
+        CancellationToken cancellationToken)
+    {
+        using var client = Connect(endpoint);
+        await client.Containers.GetContainerLogsAsync(
+            containerId,
+            new ContainerLogsParameters
+            {
+                ShowStdout = true,
+                ShowStderr = true,
+                Follow = true,
+                Tail = tail.ToString()
+            },
+            progress,
+            cancellationToken);
+    }
+
     public async Task<ContainerSample> ReadStatsAsync(
         DockerEndpoint endpoint,
         string containerId,

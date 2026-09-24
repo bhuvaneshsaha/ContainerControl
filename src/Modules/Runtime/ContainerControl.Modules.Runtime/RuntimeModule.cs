@@ -28,6 +28,7 @@ public static class RuntimeModule
                 npgsql.MigrationsAssembly(typeof(RuntimeDbContext).Assembly.GetName().Name);
             }));
         services.AddScoped<RuntimeInspector>();
+        services.AddSignalR();
         return services;
     }
 }

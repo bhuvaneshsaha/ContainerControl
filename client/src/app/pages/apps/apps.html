@@ -51,7 +51,8 @@
         <button type="button" (click)="act(app, 'restart')">Restart</button>
         <button type="button" (click)="act(app, 'rollback')">Rollback</button>
         <button type="button" (click)="openSecrets(app)">Secrets</button>
-        <button type="button" (click)="logs(app)">Logs</button>
+        <button type="button" *appHasPermission="'runtime.logs.read'" (click)="logs(app)">Logs</button>
+        <button type="button" *appHasPermission="'runtime.logs.read'" (click)="live(app)">Live logs</button>
         <button type="button" (click)="stats(app)">Stats</button>
       </li>
     }
