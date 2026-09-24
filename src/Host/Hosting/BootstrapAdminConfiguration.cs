@@ -20,7 +20,6 @@ public static class BootstrapAdminConfiguration
         Map(configuration, "EDGE_ACME_EMAIL", "Edge:AcmeEmail");
         Map(configuration, "EDGE_HTTP_PORT", "Edge:HttpPort");
         Map(configuration, "EDGE_HTTPS_PORT", "Edge:HttpsPort");
-        Map(configuration, "SECRETS_FILE_ROOT", "Secrets:FileRoot");
     }
 
     private static void Map(ConfigurationManager configuration, string variable, string key)

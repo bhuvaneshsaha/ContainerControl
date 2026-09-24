@@ -11,7 +11,6 @@ using ContainerControl.Modules.Platform.Hosts;
 using ContainerControl.SharedKernel.CurrentUser;
 using ContainerControl.SharedKernel.Time;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 
 namespace ContainerControl.Modules.Delivery.Runs;
 
@@ -27,7 +26,6 @@ public sealed class DeployService
     private readonly ITeamDirectory _teams;
     private readonly ICurrentUser _currentUser;
     private readonly IClock _clock;
-    private readonly IConfiguration _configuration;
 
     public DeployService(
         DeliveryDbContext db,
@@ -39,8 +37,7 @@ public sealed class DeployService
         IEdgeGateway edge,
         ITeamDirectory teams,
         ICurrentUser currentUser,
-        IClock clock,
-        IConfiguration configuration)
+        IClock clock)
     {
         _db = db;
         _apps = apps;
@@ -52,7 +49,6 @@ public sealed class DeployService
         _teams = teams;
         _currentUser = currentUser;
         _clock = clock;
-        _configuration = configuration;
     }
 
     public async Task<DeployOutcome> DeployAsync(Guid applicationId, Guid actorUserId, bool approved, CancellationToken cancellationToken)
@@ -233,24 +229,12 @@ public sealed class DeployService
         }
 
         var ordered = Order(plan.Services);
+        var secretInputs = secretValues.Select(pair => (pair.Key, pair.Value.Value, pair.Value.Mode)).ToArray();
         foreach (var service in ordered)
         {
             var image = service.Image;
             await _engine.PullImageAsync(endpoint, image, cancellationToken);
-            var environment = new Dictionary<string, string>(service.Environment, StringComparer.Ordinal);
-            var binds = new List<string>();
-            foreach (var (name, secret) in secretValues)
-            {
-                if (secret.Mode == "file")
-                {
-                    binds.Add(WriteSecretFile(app.Id, name, secret.Value));
-                }
-                else
-                {
-                    environment[name] = secret.Value;
-                }
-            }
-
+            var injected = SecretInjection.Apply(service.Environment, service.Command, secretInputs);
             var exposed = service.Exposed;
             var labels = new Dictionary<string, string>
             {
@@ -272,32 +256,39 @@ public sealed class DeployService
             var id = await _engine.CreateContainerAsync(endpoint, new ContainerPlan(
                 ContainerName(app.Id, service.Name),
                 image,
-                service.Command,
+                injected.Command,
                 labels,
-                environment,
+                injected.Environment,
                 network,
                 service.Name,
                 extra,
-                binds,
+                [],
                 new Dictionary<string, string>(),
                 "unless-stopped"), cancellationToken);
-            await _engine.StartContainerAsync(endpoint, id, cancellationToken);
-        }
-    }
+            try
+            {
+                if (injected.Files.Count > 0)
+                {
+                    var archive = SecretArchive.Create(injected.Files);
+                    await using var stream = new MemoryStream(archive, writable: false);
+                    await _engine.ExtractArchiveAsync(endpoint, id, "/", stream, cancellationToken);
+                }
 
-    private string WriteSecretFile(Guid appId, string name, string value)
-    {
-        var root = _configuration["Secrets:FileRoot"] ?? "/tmp/containercontrol-secrets";
-        var directory = Path.Combine(root, appId.ToString("N"));
-        Directory.CreateDirectory(directory);
-        var path = Path.Combine(directory, name);
-        File.WriteAllText(path, value);
-        if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
-        {
-            File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
-        }
+                await _engine.StartContainerAsync(endpoint, id, cancellationToken);
+            }
+            catch
+            {
+                try
+                {
+                    await _engine.RemoveContainerAsync(endpoint, id, cancellationToken);
+                }
+                catch (Exception)
+                {
+                }
 
-        return path + ":/run/secrets/" + name + ":ro";
+                throw;
+            }
+        }
     }
 
     private async Task RecordAsync(WorkloadSnapshot app, string status, string? error, CancellationToken cancellationToken)

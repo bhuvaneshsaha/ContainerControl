@@ -6,7 +6,7 @@ Allowed:
 
 - `image`
 - `command`
-- `environment` for non-secret configuration
+- `environment` for non-secret configuration. A `${SECRET}` or `$SECRET` placeholder is replaced at deploy with the secret of that name for the application's environment. The secret value is not written into the stored compose file.
 - `depends_on`
 - named volumes
 - `healthcheck` is parsed and not yet waited on
