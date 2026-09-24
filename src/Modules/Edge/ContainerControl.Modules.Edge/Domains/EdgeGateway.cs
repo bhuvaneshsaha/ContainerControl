@@ -1,5 +1,6 @@
 using ContainerControl.Modules.Edge.Persistence;
 using ContainerControl.Modules.Platform.Engine;
+using ContainerControl.SharedKernel.Hostnames;
 using ContainerControl.SharedKernel.Time;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -33,7 +34,7 @@ public sealed class EdgeGateway : IEdgeGateway
         var normalized = PublicHostname.Normalize(name);
         if (normalized is null)
         {
-            return (false, "Enter a domain name without a wildcard.");
+            return (false, "Enter a DNS domain name without a wildcard.");
         }
 
         var exists = await _db.Domains.AnyAsync(domain => domain.Name == normalized, cancellationToken);
@@ -115,15 +116,23 @@ public sealed class EdgeGateway : IEdgeGateway
         await _engine.StartContainerAsync(endpoint, id, cancellationToken);
     }
 
-    public IReadOnlyDictionary<string, string> LabelsFor(string routerName, string hostname, int port) =>
-        new Dictionary<string, string>
+    public IReadOnlyDictionary<string, string> LabelsFor(string routerName, string hostname, int port)
+    {
+        var rule = PublicHostname.TraefikHostRule(hostname);
+        if (rule is null)
+        {
+            throw new ArgumentException("The hostname is not a DNS name.", nameof(hostname));
+        }
+
+        return new Dictionary<string, string>
         {
             ["traefik.enable"] = "true",
             ["traefik.docker.network"] = EdgeNetworkName,
-            ["traefik.http.routers." + routerName + ".rule"] = "Host(`" + hostname + "`)",
+            ["traefik.http.routers." + routerName + ".rule"] = rule,
             ["traefik.http.routers." + routerName + ".entrypoints"] = "web",
             ["traefik.http.services." + routerName + ".loadbalancer.server.port"] = port.ToString()
         };
+    }
 
     private static string SocketPath(string endpoint)
     {
