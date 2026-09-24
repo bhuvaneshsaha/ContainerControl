@@ -14,20 +14,20 @@ export const xsrfInterceptor: HttpInterceptorFn = (req, next) => {
 
   const send = (token: string | null) => {
     const outgoing =
-      token && !safeMethods.has(method)
+      token && !safeMethods.has(method) && !req.headers.has('X-XSRF-TOKEN')
         ? req.clone({ setHeaders: { 'X-XSRF-TOKEN': token } })
         : req;
     return next(outgoing).pipe(
       tap((event) => {
         if (event instanceof HttpResponse) {
-          xsrf.remember(event.headers.get('X-XSRF-TOKEN'));
+          xsrf.remember(readToken(event));
         }
       }),
     );
   };
 
-  if (safeMethods.has(method) || req.url.endsWith('/auth/csrf') || xsrf.current()) {
-    return send(xsrf.current());
+  if (safeMethods.has(method) || req.url.endsWith('/auth/csrf') || req.headers.has('X-XSRF-TOKEN')) {
+    return send(null);
   }
 
   const http = new HttpClient(backend);
@@ -37,7 +37,21 @@ export const xsrfInterceptor: HttpInterceptorFn = (req, next) => {
       withCredentials: true,
     }),
   ).pipe(
-    tap((response) => xsrf.remember(response.headers.get('X-XSRF-TOKEN'))),
-    switchMap((response) => send(response.headers.get('X-XSRF-TOKEN'))),
+    tap((response) => xsrf.remember(readToken(response))),
+    switchMap((response) => send(readToken(response))),
   );
 };
+
+function readToken(response: HttpResponse<unknown>): string | null {
+  const header = response.headers.get('X-XSRF-TOKEN');
+  if (header) {
+    return header;
+  }
+
+  const body = response.body;
+  if (body && typeof body === 'object' && 'token' in body && typeof body.token === 'string') {
+    return body.token;
+  }
+
+  return null;
+}

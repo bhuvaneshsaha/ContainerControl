@@ -63,6 +63,7 @@ public static class AccessModuleExtensions
             options.HeaderName = "X-XSRF-TOKEN";
             options.Cookie.Name = "ContainerControl.Antiforgery";
             options.Cookie.HttpOnly = true;
+            options.Cookie.Path = "/";
             options.Cookie.SameSite = SameSiteMode.Lax;
             options.Cookie.SecurePolicy = securePolicy;
         });

@@ -1,5 +1,7 @@
 namespace ContainerControl.Modules.Access.Infrastructure.Http;
 
+public sealed record CsrfTokenResponse(string? Token);
+
 public sealed record LoginRequest(string? Email, string? Password);
 
 public sealed record CreateUserRequest(string? Email, string? Password, string? DisplayName);

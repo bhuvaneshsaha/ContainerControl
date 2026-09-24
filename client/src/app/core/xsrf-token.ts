@@ -12,6 +12,10 @@ export class XsrfToken {
     }
   }
 
+  clear(): void {
+    this.value = null;
+  }
+
   current(): string | null {
     return this.value;
   }

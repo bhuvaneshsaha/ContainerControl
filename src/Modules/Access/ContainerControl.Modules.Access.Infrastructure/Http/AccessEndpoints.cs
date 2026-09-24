@@ -37,7 +37,7 @@ public static class AccessEndpoints
                     http.Response.Headers["X-XSRF-TOKEN"] = tokens.RequestToken;
                 }
 
-                return Results.NoContent();
+                return Results.Ok(new CsrfTokenResponse(tokens.RequestToken));
             })
             .AllowAnonymous()
             .WithName("IssueCsrfToken")

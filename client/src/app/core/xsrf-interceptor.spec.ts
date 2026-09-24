@@ -33,12 +33,27 @@ describe('xsrfInterceptor', () => {
 
     const csrf = http.expectOne(`${environment.apiUrl}/auth/csrf`);
     expect(csrf.request.withCredentials).toBe(true);
-    csrf.flush(null, { headers: { 'X-XSRF-TOKEN': 'token-1' } });
+    csrf.flush({ token: 'token-1' });
 
     const post = http.expectOne(`${environment.apiUrl}/platform/hosts`);
     expect(post.request.headers.get('X-XSRF-TOKEN')).toBe('token-1');
     post.flush({ id: 'host-1' });
 
     await pending;
+  });
+
+  it('asks for a new token after sign-in instead of reusing the anonymous one', async () => {
+    const client = TestBed.inject(HttpClient);
+    const first = firstValueFrom(client.post(`${environment.apiUrl}/auth/login`, {}));
+    http.expectOne(`${environment.apiUrl}/auth/csrf`).flush({ token: 'anonymous' });
+    http.expectOne(`${environment.apiUrl}/auth/login`).flush(null);
+    await first;
+
+    const second = firstValueFrom(client.post(`${environment.apiUrl}/platform/hosts`, { name: 'local' }));
+    http.expectOne(`${environment.apiUrl}/auth/csrf`).flush({ token: 'signed-in' });
+    const post = http.expectOne(`${environment.apiUrl}/platform/hosts`);
+    expect(post.request.headers.get('X-XSRF-TOKEN')).toBe('signed-in');
+    post.flush({ id: 'host-1' });
+    await second;
   });
 });

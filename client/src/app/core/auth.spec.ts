@@ -32,7 +32,7 @@ describe('AuthService', () => {
 
     const csrf = await nextRequest(`${environment.apiUrl}/auth/csrf`);
     expect(csrf.request.withCredentials).toBe(true);
-    csrf.flush(null, { headers: { 'X-XSRF-TOKEN': 'token-1' } });
+    csrf.flush({ token: 'token-1' });
 
     const login = await nextRequest(`${environment.apiUrl}/auth/login`);
     expect(login.request.withCredentials).toBe(true);
