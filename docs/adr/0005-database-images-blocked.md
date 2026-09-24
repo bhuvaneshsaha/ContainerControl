@@ -10,4 +10,4 @@ Production databases are admin-provisioned on their own VMs. Letting a compose f
 Compose policy rejects database images. Developers receive connection strings as Infisical references. The data tier is not a container on the application network.
 
 ## Consequences
-Compose policy rejects database images before any container is created. Developers still receive connection strings as secret references. The data tier stays off the application network. Local control-plane PostgreSQL is the exception: Compose starts it for the control plane, and it is not an application workload.
+Compose policy rejects database images before any container is created. The check matches product tokens on the repository path, including official images and common vendor tags (Bitnami `postgresql`, PostGIS, pgvector, TimescaleDB, `mssql/server`, and `azure-sql-edge`). Redis, Valkey, and Memcached stay allowed. Oracle Linux is not a database image. Developers still receive connection strings as secret references. The data tier stays off the application network. Local control-plane PostgreSQL is the exception: Compose starts it for the control plane, and it is not an application workload.

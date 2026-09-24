@@ -20,12 +20,41 @@ public sealed record ComposePlan(bool Accepted, IReadOnlyList<string> Errors, IR
 
 public static class ComposePolicy
 {
-    private static readonly string[] DatabaseMarkers =
+    // Whole tokens only. An exact leaf or "name-" prefix misses vendor names
+    // (postgresql, timescaledb) and parent paths (mssql/server). Token boundaries
+    // keep postgrest, phpmyadmin, and oraclelinux allowed.
+    private static readonly HashSet<string> DatabaseTokens = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "postgres", "postgresql", "postgis", "pgvector", "timescale", "timescaledb", "citus",
+        "mysql", "mariadb", "percona",
+        "mongo", "mongodb",
+        "mssql", "sqlserver",
+        "cassandra", "scylla", "scylladb",
+        "cockroach", "cockroachdb",
+        "clickhouse",
+        "elasticsearch", "opensearch",
+        "influxdb",
+        "neo4j",
+        "couchdb", "couchbase"
+    };
+
+    // Hyphenated product names that are not a single token in DatabaseTokens.
+    private static readonly string[] DatabasePhrases =
     [
-        "postgres", "mysql", "mariadb", "mongo", "mongodb", "mssql", "sqlserver",
-        "oracle", "cassandra", "cockroach", "clickhouse", "elasticsearch", "opensearch",
-        "influxdb", "neo4j", "couchdb", "percona", "timescale"
+        "pgvecto-rs",
+        "azure-sql-edge",
+        "sql-server",
+        "database-enterprise",
+        "database-express",
+        "database-standard",
+        "database-free",
+        "database-personal"
     ];
+
+    private static readonly HashSet<string> OracleEditionTokens = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "enterprise", "express", "free", "standard", "personal"
+    };
 
     public static ComposePlan FromImage(string image, IReadOnlyList<string>? command, bool exposed, int? port)
     {
@@ -93,7 +122,7 @@ public static class ComposePolicy
 
             if (IsDatabaseImage(image))
             {
-                errors.Add($"Service '{name}' uses database image '{image}'.");
+                errors.Add($"Service '{name}' uses database image '{image}'. Use the data tier.");
             }
 
             var extension = Child(body, "x-containercontrol") as YamlMappingNode;
@@ -164,13 +193,125 @@ public static class ComposePolicy
 
     public static bool IsDatabaseImage(string image)
     {
-        var name = image.Split('@')[0];
+        if (string.IsNullOrWhiteSpace(image))
+        {
+            return false;
+        }
+
+        var segments = RepositorySegments(image);
+        if (segments.Length == 0)
+        {
+            return false;
+        }
+
+        // A leading registry host is not a product name. "oracle" is matched on the
+        // leaf only so Oracle Linux and Instant Client are not treated as databases.
+        var firstName = IsRegistryHost(segments[0]) && segments.Length > 1 ? 1 : 0;
+        for (var index = firstName; index < segments.Length; index++)
+        {
+            if (NamesDatabase(segments[index], leaf: index == segments.Length - 1))
+            {
+                return true;
+            }
+        }
+
+        return IsOracleRegistryDatabase(segments);
+    }
+
+    private static string[] RepositorySegments(string image)
+    {
+        var name = image.Trim();
+        var digest = name.IndexOf('@');
+        if (digest >= 0)
+        {
+            name = name[..digest];
+        }
+
         var slash = name.LastIndexOf('/');
         var colon = name.LastIndexOf(':');
-        var repo = colon > slash ? name[..colon] : name;
-        var leaf = repo[(repo.LastIndexOf('/') + 1)..];
-        return DatabaseMarkers.Any(marker => leaf.Equals(marker, StringComparison.OrdinalIgnoreCase)
-            || leaf.StartsWith(marker + "-", StringComparison.OrdinalIgnoreCase));
+        if (colon > slash)
+        {
+            name = name[..colon];
+        }
+
+        return name.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    }
+
+    private static bool IsRegistryHost(string segment) =>
+        segment.Contains('.')
+        || segment.Contains(':')
+        || segment.Equals("localhost", StringComparison.OrdinalIgnoreCase);
+
+    private static bool NamesDatabase(string segment, bool leaf)
+    {
+        var normalized = segment.Replace('_', '-');
+        foreach (var phrase in DatabasePhrases)
+        {
+            if (ContainsHyphenPhrase(normalized, phrase))
+            {
+                return true;
+            }
+        }
+
+        foreach (var token in normalized.Split('-', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (leaf && token.Equals("oracle", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (DatabaseTokens.Contains(token))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool ContainsHyphenPhrase(string segment, string phrase)
+    {
+        if (segment.Equals(phrase, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return ("-" + segment + "-").Contains("-" + phrase + "-", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsOracleRegistryDatabase(string[] segments)
+    {
+        if (segments.Length < 3 || !IsOracleRegistryHost(segments[0]))
+        {
+            return false;
+        }
+
+        var hasDatabaseSegment = false;
+        for (var index = 1; index < segments.Length - 1; index++)
+        {
+            if (segments[index].Equals("database", StringComparison.OrdinalIgnoreCase))
+            {
+                hasDatabaseSegment = true;
+                break;
+            }
+        }
+
+        if (!hasDatabaseSegment)
+        {
+            return false;
+        }
+
+        var leaf = segments[^1].Replace('_', '-');
+        return leaf.Split('-', StringSplitOptions.RemoveEmptyEntries)
+            .Any(token => OracleEditionTokens.Contains(token));
+    }
+
+    private static bool IsOracleRegistryHost(string segment)
+    {
+        var colon = segment.LastIndexOf(':');
+        var host = colon > 0 ? segment[..colon] : segment;
+        return host.Equals("oracle.com", StringComparison.OrdinalIgnoreCase)
+            || host.EndsWith(".oracle.com", StringComparison.OrdinalIgnoreCase);
     }
 
     private static void RejectFlag(YamlMappingNode body, string service, string key, List<string> errors)
