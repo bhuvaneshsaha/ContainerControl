@@ -102,5 +102,3 @@ npm test --prefix client -- --watch=false
 ```
 
 Integration tests start PostgreSQL with Testcontainers. They cover health, sign-in, a rejected unknown user, permission denial, Engine version ping, secret storage, deploy, app-network isolation, compose rejection, Traefik routing, logs, stats, rollback, and the deploy webhook. The secret check talks to an in-process stand-in of the Infisical v4 API. Creating a real machine identity is still manual.
-
-Pull requests into `main` run [`.github/workflows/ci.yml`](.github/workflows/ci.yml) on GitHub-hosted `ubuntu-latest`, which has Docker for Testcontainers. The job restores and builds `ContainerControl.sln` in Release, runs the host integration tests, then runs `npm ci`, `npm run build`, and `npm test -- --watch=false` in `client`. The workflow stores no secrets. Release and tag publishing are a later workflow.

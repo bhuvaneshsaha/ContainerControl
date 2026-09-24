@@ -1,7 +1,9 @@
 # Merge gate for pull requests into main.
-# ubuntu-latest provides a Docker engine. Integration tests use Testcontainers.PostgreSql
-# and talk to unix:///var/run/docker.sock. This workflow stores no secrets.
-# Release and tag publishing is a follow-up workflow.
+# .NET comes only from global.json (SDK 10.0.100, rollForward latestFeature).
+# Node is pinned to the 22 LTS line (Jod), currently 22.23.3.
+# ubuntu-latest already runs Docker Engine for the job. Testcontainers uses that
+# engine. This workflow does not install Docker Desktop and does not add
+# docker.sock mounts. It stores no secrets. Release and tag publishing is a follow-up.
 
 name: CI
 
@@ -41,7 +43,9 @@ jobs:
       - name: Build
         run: dotnet build ContainerControl.sln -c Release --no-restore
 
-      - name: Confirm Docker for Testcontainers
+      # The hosted runner's Docker Engine is already available. Do not install
+      # Docker Desktop and do not bind-mount the host socket.
+      - name: Confirm Docker Engine
         run: docker info
 
       - name: Integration tests
@@ -50,7 +54,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: 22
+          node-version: 22.23.3
           cache: npm
           cache-dependency-path: client/package-lock.json
           package-manager-cache: false
