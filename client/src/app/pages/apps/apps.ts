@@ -1,10 +1,11 @@
-import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { Component, inject, signal } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
 import { AppListResponse, AppResponse, HostListResponse, SecretListResponse, SecretResponse, TeamListResponse } from '../../core/api-models';
+import { problemMessage } from '../../core/problem-message';
 
 @Component({
   selector: 'app-apps',
@@ -160,8 +161,8 @@ export class Apps {
         this.http.get<{ text: string }>(`${environment.apiUrl}/apps/${app.id}/logs`),
       );
       this.detail.set(response.text || 'This application has no log output yet.');
-    } catch {
-      this.detail.set('Logs could not be loaded.');
+    } catch (error) {
+      this.detail.set(problemMessage(error, 'Logs could not be loaded.'));
     }
   }
 
@@ -176,18 +177,8 @@ export class Apps {
         response.services.map((item) => `${item.service}: CPU ${item.cpuPercent}%, memory ${item.memoryBytes} bytes`).join('\n') ||
           'No running services returned stats.',
       );
-    } catch {
-      this.detail.set('Stats could not be loaded.');
+    } catch (error) {
+      this.detail.set(problemMessage(error, 'Stats could not be loaded.'));
     }
   }
-}
-
-function problemMessage(error: unknown, fallback: string): string {
-  if (!(error instanceof HttpErrorResponse) || !error.error || typeof error.error !== 'object') {
-    return fallback;
-  }
-
-  const body = error.error as { title?: string; detail?: string; errors?: Record<string, string[]> };
-  const field = body.errors && Object.values(body.errors).flat().find((item) => item.length > 0);
-  return field || body.detail || body.title || fallback;
 }

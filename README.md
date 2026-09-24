@@ -79,14 +79,14 @@ There is no self-registration endpoint.
 
 ## What this slice contains
 
-- Access: Identity cookie sign-in and sign-out, admin-provisioned users, teams, permission roles, the permission catalog, API token issuance, a break-glass table placeholder, and append-only audit.
-- Platform: Docker host registration and an Engine version ping. Preparing a host creates the `edge` network and the Traefik container.
-- Applications: desired state and secret references. Secret values are written to Infisical and are not stored in PostgreSQL. Deploy places them in the container as environment variables, or as files under `/run/secrets`, and fills `${SECRET}` placeholders in the compose environment and command.
-- Delivery: compose policy, deploy, start, stop, restart, rollback, and the CI webhook.
-- Edge: allowed domains and Traefik labels for an exposed hostname.
-- Runtime: log tail and container CPU and memory stats.
+- Access: Identity cookie sign-in and sign-out, admin-provisioned users, teams, permission roles, the permission catalog, API token issuance, a break-glass table that is not evaluated, and append-only audit. The API does not yet list audit rows.
+- Platform: Docker host registration and an Engine version ping. Preparing a host creates the `edge` network and the Traefik container. Quotas and capacity are not stored.
+- Applications: desired state and secret references. Secret values are written to Infisical and are not stored in PostgreSQL. Deploy places them in the container as environment variables, or as files under `/run/secrets`, and fills `${SECRET}` placeholders in the compose environment and command. Creating a `prod` application sets approval required.
+- Delivery: compose policy, deploy, start, stop, restart, rollback, and the CI webhook. `POST /apps/{id}/deploy` on an approval-required application stays `pending-approval` until `POST /apps/{id}/approve`. A failed deploy is recorded with a short message. That message omits text that looks like a secret assignment. A healthcheck in a compose file is ignored.
+- Edge: allowed domains and Traefik labels for an exposed hostname. If prepare cannot reach the Engine, the API returns 502.
+- Runtime: a one-shot log read and container CPU and memory stats. The log call does not stream.
 - Registries: schema placeholder. Image pulls use the Engine's existing registry credentials.
-- Angular: sign-in, permissions, applications, secrets, hosts, domains, and tokens. Nav and route guards use permission codes.
+- Angular: sign-in, permissions, applications, secrets, hosts, domains, users and teams, and tokens. Nav and route guards use permission codes. The Applications page has no Approve action. The Users page assigns an existing role; it does not edit the catalog on a role, and it does not show audit.
 
 Permission codes are listed in [docs/permissions.md](docs/permissions.md). Module boundaries are in [docs/modules.md](docs/modules.md). Logs, traces, and health checks are in [docs/observability.md](docs/observability.md). The shared UI catalog is in [docs/components/README.md](docs/components/README.md).
 

@@ -1,5 +1,7 @@
 using ContainerControl.Modules.Edge.Domains;
+using ContainerControl.Modules.Platform.Engine;
 using ContainerControl.SharedKernel.Authorization;
+using Docker.DotNet;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -57,7 +59,17 @@ public static class EdgeEndpoints
                     return Results.NotFound();
                 }
 
-                await edge.EnsureEdgeAsync(host.Endpoint, cancellationToken);
+                try
+                {
+                    await edge.EnsureEdgeAsync(host.Endpoint, cancellationToken);
+                }
+                catch (Exception exception) when (exception is DockerEngineException or DockerApiException or HttpRequestException or IOException)
+                {
+                    return Results.Problem(
+                        statusCode: StatusCodes.Status502BadGateway,
+                        title: "The Docker host could not be prepared.");
+                }
+
                 return Results.NoContent();
             })
             .RequirePermission(ContainerControl.Modules.Platform.Http.PlatformPermissions.HostsManage)

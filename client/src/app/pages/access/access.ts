@@ -1,10 +1,11 @@
-import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { Component, inject, signal } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
 import { RoleListResponse, TeamListResponse, UserListResponse, UserSummary } from '../../core/api-models';
+import { problemMessage } from '../../core/problem-message';
 
 @Component({
   selector: 'app-access',
@@ -129,14 +130,4 @@ export class Access {
       this.message.set(problemMessage(error, 'The user could not be added to the team.'));
     }
   }
-}
-
-function problemMessage(error: unknown, fallback: string): string {
-  if (!(error instanceof HttpErrorResponse) || !error.error || typeof error.error !== 'object') {
-    return fallback;
-  }
-
-  const body = error.error as { title?: string; errors?: Record<string, string[]> };
-  const detail = body.errors && Object.values(body.errors).flat().find((item) => item.length > 0);
-  return detail || body.title || fallback;
 }

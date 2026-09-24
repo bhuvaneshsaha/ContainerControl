@@ -9,8 +9,9 @@ Allowed:
 - `environment` for non-secret configuration. A `${SECRET}` or `$SECRET` placeholder is replaced at deploy with the secret of that name for the application's environment. The secret value is not written into the stored compose file.
 - `depends_on`
 - named volumes
-- `healthcheck` is parsed and not yet waited on
 - `x-containercontrol.exposed` and `x-containercontrol.port` to mark a service for Traefik
+
+A `healthcheck` key is not rejected. Deploy does not read it and does not wait for the container to become healthy.
 
 Rejected before any container is created:
 

@@ -8,7 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace ContainerControl.Modules.Platform;
 
 /// <summary>
-/// Docker hosts, quotas, allowed domains, and capacity.
+/// Docker hosts and the Engine version ping. Quotas and capacity are not in this module yet. Allowed domains live in Edge.
 /// </summary>
 public static class PlatformModule
 {

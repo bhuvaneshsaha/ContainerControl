@@ -11,6 +11,7 @@ using ContainerControl.Modules.Platform.Hosts;
 using ContainerControl.SharedKernel.CurrentUser;
 using ContainerControl.SharedKernel.Time;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace ContainerControl.Modules.Delivery.Runs;
 
@@ -26,6 +27,7 @@ public sealed class DeployService
     private readonly ITeamDirectory _teams;
     private readonly ICurrentUser _currentUser;
     private readonly IClock _clock;
+    private readonly ILogger<DeployService> _logger;
 
     public DeployService(
         DeliveryDbContext db,
@@ -37,7 +39,8 @@ public sealed class DeployService
         IEdgeGateway edge,
         ITeamDirectory teams,
         ICurrentUser currentUser,
-        IClock clock)
+        IClock clock,
+        ILogger<DeployService> logger)
     {
         _db = db;
         _apps = apps;
@@ -49,6 +52,7 @@ public sealed class DeployService
         _teams = teams;
         _currentUser = currentUser;
         _clock = clock;
+        _logger = logger;
     }
 
     public async Task<DeployOutcome> DeployAsync(Guid applicationId, Guid actorUserId, bool approved, CancellationToken cancellationToken)
@@ -191,9 +195,13 @@ public sealed class DeployService
         {
             await ApplyAsync(app, host.Endpoint, plan, anyExposed, publicHost, cancellationToken);
         }
-        catch (Exception exception) when (exception is DockerEngineException or Docker.DotNet.DockerApiException or SecretStoreException or HttpRequestException or IOException)
+        catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            var message = SafeFailure(exception);
+            _logger.LogError(
+                "Deployment failed for {ApplicationId}. {ExceptionType}",
+                app.Id,
+                exception.GetType().Name);
+            var message = DeployFailureText.Describe(exception);
             await RecordAsync(app, "failed", message, cancellationToken);
             await _apps.SetStatusAsync(app.Id, "failed", cancellationToken);
             return DeployOutcome.Fail(StatusCodes.Status502BadGateway, message);
@@ -281,14 +289,18 @@ public sealed class DeployService
 
                 await _engine.StartContainerAsync(endpoint, id, cancellationToken);
             }
-            catch
+            catch (Exception)
             {
                 try
                 {
                     await _engine.RemoveContainerAsync(endpoint, id, cancellationToken);
                 }
-                catch (Exception)
+                catch (Exception cleanupError) when (cleanupError is not OperationCanceledException)
                 {
+                    _logger.LogWarning(
+                        "Removing container {ContainerId} after a failed start did not succeed. {ExceptionType}",
+                        id,
+                        cleanupError.GetType().Name);
                 }
 
                 throw;
@@ -392,20 +404,6 @@ public sealed class DeployService
         }
 
         return JsonSerializer.Deserialize<List<string>>(json);
-    }
-
-    private static string SafeFailure(Exception exception)
-    {
-        if (exception is DockerEngineException or SecretStoreException)
-        {
-            var text = exception.Message.ReplaceLineEndings(" ").Trim();
-            if (text.Length is > 0 and <= 300 && !text.Contains('='))
-            {
-                return text;
-            }
-        }
-
-        return "The Engine rejected the deployment.";
     }
 
     private static string ContainerName(Guid appId, string service) =>
