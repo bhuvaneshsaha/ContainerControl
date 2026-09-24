@@ -170,10 +170,14 @@ public sealed class DeployService
         }
 
         var anyExposed = plan.Services.Any(service => service.Exposed) || (string.IsNullOrWhiteSpace(app.ComposeYaml) && app.Exposed);
+        var publicHost = PublicHostname.Normalize(app.Hostname);
         if (anyExposed && !await _edge.HostnameAllowedAsync(app.Hostname, cancellationToken))
         {
-            const string message = "The hostname is not under an allowed domain.";
+            var message = publicHost is null
+                ? "Set a hostname under an allowed domain."
+                : "The hostname '" + publicHost + "' is not under an allowed domain.";
             await RecordAsync(app, "rejected", message, cancellationToken);
+            await _apps.SetStatusAsync(app.Id, "rejected", cancellationToken);
             return DeployOutcome.Fail(StatusCodes.Status400BadRequest, message);
         }
 
@@ -185,13 +189,14 @@ public sealed class DeployService
 
         try
         {
-            await ApplyAsync(app, host.Endpoint, plan, anyExposed, cancellationToken);
+            await ApplyAsync(app, host.Endpoint, plan, anyExposed, publicHost, cancellationToken);
         }
         catch (Exception exception) when (exception is DockerEngineException or Docker.DotNet.DockerApiException or SecretStoreException or HttpRequestException or IOException)
         {
-            await RecordAsync(app, "failed", "The Engine rejected the deployment.", cancellationToken);
+            var message = SafeFailure(exception);
+            await RecordAsync(app, "failed", message, cancellationToken);
             await _apps.SetStatusAsync(app.Id, "failed", cancellationToken);
-            return DeployOutcome.Fail(StatusCodes.Status502BadGateway, "The Engine rejected the deployment.");
+            return DeployOutcome.Fail(StatusCodes.Status502BadGateway, message);
         }
 
         await RecordAsync(app, "succeeded", null, cancellationToken);
@@ -199,7 +204,7 @@ public sealed class DeployService
         return DeployOutcome.Ok("running");
     }
 
-    private async Task ApplyAsync(WorkloadSnapshot app, string endpointAddress, ComposePlan plan, bool anyExposed, CancellationToken cancellationToken)
+    private async Task ApplyAsync(WorkloadSnapshot app, string endpointAddress, ComposePlan plan, bool anyExposed, string? publicHost, CancellationToken cancellationToken)
     {
         var endpoint = new DockerEndpoint(endpointAddress);
         var network = "cc-app-" + app.Id.ToString("N");
@@ -243,9 +248,9 @@ public sealed class DeployService
                 ["cc.service"] = service.Name
             };
             var extra = new List<string>();
-            if (exposed && !string.IsNullOrWhiteSpace(app.Hostname) && service.Port is not null)
+            if (exposed && publicHost is not null && service.Port is not null)
             {
-                foreach (var (key, value) in _edge.LabelsFor(RouterName(app.Id, service.Name), app.Hostname, service.Port.Value))
+                foreach (var (key, value) in _edge.LabelsFor(RouterName(app.Id, service.Name), publicHost, service.Port.Value))
                 {
                     labels[key] = value;
                 }
@@ -387,6 +392,20 @@ public sealed class DeployService
         }
 
         return JsonSerializer.Deserialize<List<string>>(json);
+    }
+
+    private static string SafeFailure(Exception exception)
+    {
+        if (exception is DockerEngineException or SecretStoreException)
+        {
+            var text = exception.Message.ReplaceLineEndings(" ").Trim();
+            if (text.Length is > 0 and <= 300 && !text.Contains('='))
+            {
+                return text;
+            }
+        }
+
+        return "The Engine rejected the deployment.";
     }
 
     private static string ContainerName(Guid appId, string service) =>
