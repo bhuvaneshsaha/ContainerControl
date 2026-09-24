@@ -1,4 +1,4 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Component, inject, signal } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
@@ -49,8 +49,8 @@ export class Hosts {
       await firstValueFrom(this.http.post(`${environment.apiUrl}/platform/hosts`, this.form.getRawValue()));
       this.form.controls.name.setValue('');
       await this.load();
-    } catch {
-      this.message.set('The Docker host could not be registered.');
+    } catch (error) {
+      this.message.set(problemMessage(error, 'The Docker host could not be registered.'));
     }
   }
 
@@ -59,8 +59,8 @@ export class Hosts {
     try {
       await firstValueFrom(this.http.post(`${environment.apiUrl}/platform/hosts/${host.id}/ping`, {}));
       await this.load();
-    } catch {
-      this.message.set('The Engine did not answer the version ping.');
+    } catch (error) {
+      this.message.set(problemMessage(error, 'The Engine did not answer the version ping.'));
     }
   }
 
@@ -74,8 +74,18 @@ export class Hosts {
         }),
       );
       this.message.set('The edge network and Traefik container are ready.');
-    } catch {
-      this.message.set('The Docker host could not be prepared.');
+    } catch (error) {
+      this.message.set(problemMessage(error, 'The Docker host could not be prepared.'));
     }
   }
+}
+
+function problemMessage(error: unknown, fallback: string): string {
+  if (!(error instanceof HttpErrorResponse) || !error.error || typeof error.error !== 'object') {
+    return fallback;
+  }
+
+  const body = error.error as { title?: string; errors?: Record<string, string[]> };
+  const detail = body.errors && Object.values(body.errors).flat().find((item) => item.length > 0);
+  return detail || body.title || fallback;
 }
