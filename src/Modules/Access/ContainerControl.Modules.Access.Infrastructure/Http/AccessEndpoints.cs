@@ -129,6 +129,21 @@ public static class AccessEndpoints
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
 
+        endpoints.MapGet("/access/users", async (UserAdminService users, CancellationToken cancellationToken) =>
+            {
+                var list = await users.ListAsync(cancellationToken);
+                var items = list
+                    .Select(user => new UserSummary(user.Id, user.Email ?? string.Empty, user.DisplayName, user.IsDisabled))
+                    .ToArray();
+                return Results.Ok(new UserListResponse(items));
+            })
+            .RequirePermission(PermissionCatalog.AccessUsersManage)
+            .WithName("ListUsers")
+            .WithTags("Access")
+            .Produces<UserListResponse>()
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
         endpoints.MapPost("/access/users", async (
                 CreateUserRequest? request,
                 UserAdminService users,
@@ -294,7 +309,11 @@ public static class AccessEndpoints
             .WithTags("Access")
             .Produces<TeamListResponse>();
 
-        endpoints.MapPost("/access/teams", async (CreateTeamRequest? request, TeamDirectory teams, CancellationToken cancellationToken) =>
+        endpoints.MapPost("/access/teams", async (
+                ClaimsPrincipal principal,
+                CreateTeamRequest? request,
+                TeamDirectory teams,
+                CancellationToken cancellationToken) =>
             {
                 var result = await teams.CreateAsync(request?.Name ?? string.Empty, cancellationToken);
                 if (!result.Ok || result.Id is null)
@@ -302,6 +321,8 @@ public static class AccessEndpoints
                     return Results.ValidationProblem(new Dictionary<string, string[]> { ["team"] = [result.Error ?? "The team was not created."] });
                 }
 
+                var userId = Guid.Parse(principal.FindFirstValue(ClaimTypes.NameIdentifier)!);
+                await teams.AddMemberAsync(result.Id.Value, userId, cancellationToken);
                 return Results.Created($"/access/teams/{result.Id}", new TeamResponse(result.Id.Value, request!.Name!.Trim()));
             })
             .RequirePermission(PermissionCatalog.AccessTeamsManage)

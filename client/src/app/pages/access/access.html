@@ -1,0 +1,78 @@
+<h1>Users and teams</h1>
+@if (message()) {
+  <p role="alert">{{ message() }}</p>
+}
+@if (status() === 'loading') {
+  <p>Loading users and teams.</p>
+} @else if (status() === 'error') {
+  <p>Users and teams could not be loaded.</p>
+} @else {
+  <h2>Users</h2>
+  <form [formGroup]="userForm" (ngSubmit)="createUser()">
+    <label for="user-email">Email</label>
+    <input id="user-email" type="email" formControlName="email" />
+    <label for="user-name">Display name</label>
+    <input id="user-name" formControlName="displayName" />
+    <label for="user-password">Password</label>
+    <input id="user-password" type="password" formControlName="password" />
+    <label for="user-role">Role</label>
+    <select id="user-role" formControlName="roleId">
+      <option value="">No role yet</option>
+      @for (role of roles(); track role.id) {
+        <option [value]="role.id">{{ role.name }}</option>
+      }
+    </select>
+    <button type="submit">Create user</button>
+  </form>
+  @if (users().length === 0) {
+    <p>No users are provisioned yet.</p>
+  } @else {
+    <ul>
+      @for (user of users(); track user.id) {
+        <li>
+          {{ user.displayName }} ({{ user.email }})
+          @if (user.disabled) {
+            <span>Disabled</span>
+          } @else {
+            <button type="button" (click)="disable(user)">Disable</button>
+          }
+        </li>
+      }
+    </ul>
+  }
+
+  <h2>Teams</h2>
+  <form [formGroup]="teamForm" (ngSubmit)="createTeam()">
+    <label for="team-name">Name</label>
+    <input id="team-name" formControlName="name" />
+    <button type="submit">Create team</button>
+  </form>
+  @if (teams().length === 0) {
+    <p>No teams exist yet.</p>
+  } @else {
+    <ul>
+      @for (team of teams(); track team.id) {
+        <li>{{ team.name }}</li>
+      }
+    </ul>
+  }
+
+  <h2>Team membership</h2>
+  <form [formGroup]="memberForm" (ngSubmit)="addMember()">
+    <label for="member-team">Team</label>
+    <select id="member-team" formControlName="teamId">
+      <option value="">Select a team</option>
+      @for (team of teams(); track team.id) {
+        <option [value]="team.id">{{ team.name }}</option>
+      }
+    </select>
+    <label for="member-user">User</label>
+    <select id="member-user" formControlName="userId">
+      <option value="">Select a user</option>
+      @for (user of users(); track user.id) {
+        <option [value]="user.id">{{ user.displayName }}</option>
+      }
+    </select>
+    <button type="submit">Add member</button>
+  </form>
+}

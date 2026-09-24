@@ -9,3 +9,4 @@ TestResults/
 *.log
 client/dist/
 client/.angular/
+deploy/local/secret-store/

@@ -4,7 +4,7 @@
     <nav aria-label="Primary">
       <a routerLink="/permissions">Permissions</a>
       <a *appHasPermission="'apps.read'" routerLink="/apps">Applications</a>
-      <a *appHasPermission="'secrets.read'" routerLink="/secrets">Secrets</a>
+      <a *appHasPermission="'access.users.manage'" routerLink="/access">Users</a>
       <a *appHasPermission="'platform.hosts.manage'" routerLink="/hosts">Hosts</a>
       <a *appHasPermission="'edge.dns.manage'" routerLink="/domains">Domains</a>
       <a *appHasPermission="'access.tokens.manage'" routerLink="/tokens">Tokens</a>

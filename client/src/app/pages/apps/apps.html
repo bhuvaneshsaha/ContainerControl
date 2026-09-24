@@ -22,8 +22,6 @@
     <option value="staging">staging</option>
     <option value="prod">prod</option>
   </select>
-  <label for="app-image">Image</label>
-  <input id="app-image" formControlName="image" />
   <label for="app-compose">Compose file</label>
   <textarea id="app-compose" formControlName="composeYaml"></textarea>
   <label for="app-port">Internal port</label>
@@ -52,11 +50,39 @@
         <button type="button" (click)="act(app, 'stop')">Stop</button>
         <button type="button" (click)="act(app, 'restart')">Restart</button>
         <button type="button" (click)="act(app, 'rollback')">Rollback</button>
+        <button type="button" (click)="openSecrets(app)">Secrets</button>
         <button type="button" (click)="logs(app)">Logs</button>
         <button type="button" (click)="stats(app)">Stats</button>
       </li>
     }
   </ul>
+  @if (selected(); as app) {
+    <h2>Secrets for {{ app.name }}</h2>
+    <form [formGroup]="secretForm" (ngSubmit)="saveSecret()">
+      <label for="secret-name">Name</label>
+      <input id="secret-name" formControlName="name" />
+      <label for="secret-mode">Injection</label>
+      <select id="secret-mode" formControlName="injectionMode">
+        <option value="env">Environment variable</option>
+        <option value="file">File</option>
+      </select>
+      <label for="secret-value">Value</label>
+      <input id="secret-value" type="password" formControlName="value" />
+      <button type="submit">Save secret</button>
+    </form>
+    @if (secrets().length === 0) {
+      <p>This application has no secrets yet.</p>
+    } @else {
+      <ul>
+        @for (secret of secrets(); track secret.id) {
+          <li>
+            {{ secret.name }} ({{ secret.injectionMode }})
+            <button type="button" (click)="deleteSecret(secret)">Delete</button>
+          </li>
+        }
+      </ul>
+    }
+  }
 }
 @if (detail()) {
   <pre>{{ detail() }}</pre>

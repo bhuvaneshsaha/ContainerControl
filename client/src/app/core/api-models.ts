@@ -28,6 +28,26 @@ export interface TeamListResponse {
   teams: TeamResponse[];
 }
 
+export interface UserSummary {
+  id: string;
+  email: string;
+  displayName: string;
+  disabled: boolean;
+}
+
+export interface UserListResponse {
+  users: UserSummary[];
+}
+
+export interface RoleSummary {
+  id: string;
+  name: string;
+}
+
+export interface RoleListResponse {
+  roles: RoleSummary[];
+}
+
 export interface AppResponse {
   id: string;
   teamId: string;

@@ -29,7 +29,9 @@ public static class ApplicationsModule
                 npgsql.MigrationsAssembly(typeof(ApplicationsDbContext).Assembly.GetName().Name);
             }));
         services.AddHttpClient(nameof(InfisicalSecretStore));
-        services.AddScoped<ISecretStore, InfisicalSecretStore>();
+        services.AddScoped<InfisicalSecretStore>();
+        services.AddScoped<DevelopmentFileSecretStore>();
+        services.AddScoped<ISecretStore, SelectingSecretStore>();
         services.AddScoped<WorkloadAdmin>();
         services.AddScoped<IWorkloadStore>(provider => provider.GetRequiredService<WorkloadAdmin>());
         services.AddScoped<ISecretCatalog>(provider => provider.GetRequiredService<WorkloadAdmin>());

@@ -211,7 +211,14 @@ public sealed class WorkloadAdmin : IWorkloadStore, ISecretCatalog
 
         var path = $"/teams/{teamId:N}/{name.Trim()}";
         var address = new SecretAddress(environment, path);
-        await _secrets.WriteAsync(address, value, cancellationToken);
+        try
+        {
+            await _secrets.WriteAsync(address, value, cancellationToken);
+        }
+        catch (SecretStoreException exception)
+        {
+            return (false, exception.Message);
+        }
         var existing = await _db.Secrets.SingleOrDefaultAsync(
             secret => secret.TeamId == teamId && secret.Environment == environment && secret.Name == name.Trim(),
             cancellationToken);
@@ -262,7 +269,14 @@ public sealed class WorkloadAdmin : IWorkloadStore, ISecretCatalog
             return false;
         }
 
-        await _secrets.DeleteAsync(new SecretAddress(secret.Environment, secret.Path), cancellationToken);
+        try
+        {
+            await _secrets.DeleteAsync(new SecretAddress(secret.Environment, secret.Path), cancellationToken);
+        }
+        catch (SecretStoreException)
+        {
+            return false;
+        }
         _db.Secrets.Remove(secret);
         await _db.SaveChangesAsync(cancellationToken);
         await _audit.WriteAsync(new AuditRecord("secrets.deleted", "secret", secret.Path, _currentUser.UserId), cancellationToken);

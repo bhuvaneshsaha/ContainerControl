@@ -112,7 +112,20 @@ public sealed class InfisicalSecretStore : ISecretStore
         return token;
     }
 
+    public bool HasCredential(string environment) => TryCredential(environment, out _);
+
     private InfisicalCredential CredentialFor(string environment)
+    {
+        if (!TryCredential(environment, out var credential) || credential is null)
+        {
+            throw new SecretStoreException(
+                "Infisical machine credentials for this environment are not configured. Create the identity and set the host environment variables. See docs/production-setup.md.");
+        }
+
+        return credential;
+    }
+
+    private bool TryCredential(string environment, out InfisicalCredential? credential)
     {
         var siteUrl = _configuration["Infisical:SiteUrl"];
         var section = _configuration.GetSection($"Infisical:Environments:{environment}");
@@ -124,11 +137,12 @@ public sealed class InfisicalSecretStore : ISecretStore
             || string.IsNullOrWhiteSpace(clientSecret)
             || string.IsNullOrWhiteSpace(projectId))
         {
-            throw new SecretStoreException(
-                "Infisical machine credentials for this environment are not configured. Create the identity and set the host environment variables. See docs/production-setup.md.");
+            credential = null;
+            return false;
         }
 
-        return new InfisicalCredential(siteUrl, clientId, clientSecret, projectId);
+        credential = new InfisicalCredential(siteUrl, clientId, clientSecret, projectId);
+        return true;
     }
 
     private static string SecretName(string path)

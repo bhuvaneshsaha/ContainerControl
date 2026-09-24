@@ -25,5 +25,7 @@ describe('Apps', () => {
   it('shows one sentence when no applications exist', () => {
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('No applications are registered yet.');
+    expect(fixture.nativeElement.querySelector('#app-compose')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('#app-image')).toBeNull();
   });
 });

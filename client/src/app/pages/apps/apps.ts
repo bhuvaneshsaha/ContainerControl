@@ -1,10 +1,10 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Component, inject, signal } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
-import { AppListResponse, AppResponse, HostListResponse, TeamListResponse } from '../../core/api-models';
+import { AppListResponse, AppResponse, HostListResponse, SecretListResponse, SecretResponse, TeamListResponse } from '../../core/api-models';
 
 @Component({
   selector: 'app-apps',
@@ -20,13 +20,19 @@ export class Apps {
   readonly apps = signal<readonly AppResponse[]>([]);
   readonly teams = signal<{ id: string; name: string }[]>([]);
   readonly hosts = signal<{ id: string; name: string }[]>([]);
+  readonly selected = signal<AppResponse | null>(null);
+  readonly secrets = signal<readonly SecretResponse[]>([]);
+  readonly secretForm = new FormGroup({
+    name: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
+    injectionMode: new FormControl('env', { nonNullable: true, validators: [Validators.required] }),
+    value: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
+  });
   readonly form = new FormGroup({
     name: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
     teamId: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
     hostId: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
     environment: new FormControl('dev', { nonNullable: true, validators: [Validators.required] }),
-    image: new FormControl('', { nonNullable: true }),
-    composeYaml: new FormControl('', { nonNullable: true }),
+    composeYaml: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
     internalPort: new FormControl('', { nonNullable: true }),
     hostname: new FormControl('', { nonNullable: true }),
     exposed: new FormControl(false, { nonNullable: true }),
@@ -55,8 +61,8 @@ export class Apps {
 
   async create(): Promise<void> {
     this.message.set('');
-    if (this.form.invalid || (!this.form.controls.image.value && !this.form.controls.composeYaml.value)) {
-      this.message.set('Enter a name, team, host, and an image or compose file.');
+    if (this.form.invalid) {
+      this.message.set('Enter a name, team, host, and a compose file.');
       return;
     }
 
@@ -67,13 +73,74 @@ export class Apps {
           ...value,
           internalPort: value.internalPort ? Number(value.internalPort) : null,
           hostname: value.hostname || null,
-          image: value.image || null,
-          composeYaml: value.composeYaml || null,
+          image: null,
+          composeYaml: value.composeYaml,
         }),
       );
       await this.load();
-    } catch {
-      this.message.set('The application could not be saved.');
+    } catch (error) {
+      this.message.set(problemMessage(error, 'The application could not be saved.'));
+    }
+  }
+
+  async openSecrets(app: AppResponse): Promise<void> {
+    this.selected.set(app);
+    this.message.set('');
+    try {
+      const response = await firstValueFrom(
+        this.http.get<SecretListResponse>(
+          `${environment.apiUrl}/secrets?teamId=${app.teamId}&environment=${app.environment}`,
+        ),
+      );
+      this.secrets.set(response.secrets);
+    } catch (error) {
+      this.secrets.set([]);
+      this.message.set(problemMessage(error, 'Secrets could not be loaded.'));
+    }
+  }
+
+  async saveSecret(): Promise<void> {
+    const app = this.selected();
+    this.message.set('');
+    if (!app || this.secretForm.invalid) {
+      this.message.set('Enter a secret name and value.');
+      return;
+    }
+
+    const value = this.secretForm.getRawValue();
+    try {
+      await firstValueFrom(
+        this.http.post(
+          `${environment.apiUrl}/secrets`,
+          {
+            teamId: app.teamId,
+            environment: app.environment,
+            name: value.name.trim(),
+            injectionMode: value.injectionMode,
+            value: value.value,
+          },
+          { observe: 'response', responseType: 'text' },
+        ),
+      );
+      this.secretForm.controls.value.setValue('');
+      await this.openSecrets(app);
+    } catch (error) {
+      this.message.set(problemMessage(error, 'The secret could not be saved.'));
+    }
+  }
+
+  async deleteSecret(secret: SecretResponse): Promise<void> {
+    const app = this.selected();
+    if (!app) {
+      return;
+    }
+
+    this.message.set('');
+    try {
+      await firstValueFrom(this.http.delete(`${environment.apiUrl}/secrets/${secret.id}`));
+      await this.openSecrets(app);
+    } catch (error) {
+      this.message.set(problemMessage(error, 'The secret could not be deleted.'));
     }
   }
 
@@ -113,4 +180,14 @@ export class Apps {
       this.detail.set('Stats could not be loaded.');
     }
   }
+}
+
+function problemMessage(error: unknown, fallback: string): string {
+  if (!(error instanceof HttpErrorResponse) || !error.error || typeof error.error !== 'object') {
+    return fallback;
+  }
+
+  const body = error.error as { title?: string; errors?: Record<string, string[]> };
+  const detail = body.errors && Object.values(body.errors).flat().find((item) => item.length > 0);
+  return detail || body.title || fallback;
 }

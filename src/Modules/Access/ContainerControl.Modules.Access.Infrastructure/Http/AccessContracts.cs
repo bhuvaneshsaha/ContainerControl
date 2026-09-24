@@ -8,6 +8,10 @@ public sealed record CreateUserRequest(string? Email, string? Password, string? 
 
 public sealed record CreateUserResponse(Guid Id);
 
+public sealed record UserSummary(Guid Id, string Email, string DisplayName, bool Disabled);
+
+public sealed record UserListResponse(IReadOnlyList<UserSummary> Users);
+
 public sealed record CurrentUserPermissionsResponse(IReadOnlyList<string> Permissions);
 
 public sealed record SessionResponse(bool SignedIn, IReadOnlyList<string> Permissions);

@@ -31,10 +31,10 @@ export const routes: Routes = [
         loadComponent: () => import('./pages/apps/apps').then((module) => module.Apps),
       },
       {
-        path: 'secrets',
-        title: 'Secrets',
-        canActivate: [permissionGuard('secrets.read')],
-        loadComponent: () => import('./pages/secrets/secrets').then((module) => module.Secrets),
+        path: 'access',
+        title: 'Users and teams',
+        canActivate: [permissionGuard('access.users.manage')],
+        loadComponent: () => import('./pages/access/access').then((module) => module.Access),
       },
       {
         path: 'domains',

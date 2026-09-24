@@ -25,6 +25,12 @@ public sealed class UserAdminService
         _currentUser = currentUser;
     }
 
+    public Task<IReadOnlyList<User>> ListAsync(CancellationToken cancellationToken)
+    {
+        IReadOnlyList<User> users = _users.Users.OrderBy(user => user.Email).ToList();
+        return Task.FromResult(users);
+    }
+
     public async Task<UserMutationResult> CreateAsync(
         string email,
         string password,
