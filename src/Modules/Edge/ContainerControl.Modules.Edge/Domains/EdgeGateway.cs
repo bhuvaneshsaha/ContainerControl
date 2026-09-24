@@ -30,8 +30,8 @@ public sealed class EdgeGateway : IEdgeGateway
 
     public async Task<(bool Ok, string? Error)> AddAsync(string name, CancellationToken cancellationToken)
     {
-        var normalized = name.Trim().Trim('.').ToLowerInvariant();
-        if (string.IsNullOrWhiteSpace(normalized) || normalized.Contains(' ') || normalized.Contains('*'))
+        var normalized = PublicHostname.Normalize(name);
+        if (normalized is null)
         {
             return (false, "Enter a domain name without a wildcard.");
         }
@@ -53,14 +53,13 @@ public sealed class EdgeGateway : IEdgeGateway
 
     public async Task<bool> HostnameAllowedAsync(string? hostname, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(hostname))
+        if (PublicHostname.Normalize(hostname) is null)
         {
             return false;
         }
 
-        var host = hostname.Trim().Trim('.').ToLowerInvariant();
         var domains = await _db.Domains.AsNoTracking().Select(domain => domain.Name).ToListAsync(cancellationToken);
-        return domains.Any(domain => host == domain || host.EndsWith("." + domain, StringComparison.Ordinal));
+        return domains.Any(domain => PublicHostname.IsUnder(hostname, domain));
     }
 
     public async Task EnsureEdgeAsync(string dockerEndpoint, CancellationToken cancellationToken)

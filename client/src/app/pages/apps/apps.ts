@@ -149,8 +149,8 @@ export class Apps {
     try {
       await firstValueFrom(this.http.post(`${environment.apiUrl}/apps/${app.id}/${action}`, {}));
       await this.load();
-    } catch {
-      this.message.set('The application action could not be completed.');
+    } catch (error) {
+      this.message.set(problemMessage(error, 'The application action could not be completed.'));
     }
   }
 
@@ -187,7 +187,7 @@ function problemMessage(error: unknown, fallback: string): string {
     return fallback;
   }
 
-  const body = error.error as { title?: string; errors?: Record<string, string[]> };
-  const detail = body.errors && Object.values(body.errors).flat().find((item) => item.length > 0);
-  return detail || body.title || fallback;
+  const body = error.error as { title?: string; detail?: string; errors?: Record<string, string[]> };
+  const field = body.errors && Object.values(body.errors).flat().find((item) => item.length > 0);
+  return field || body.detail || body.title || fallback;
 }
