@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>ContainerControl.Host</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Shared\ContainerControl.SharedKernel\ContainerControl.SharedKernel.csproj" />
+    <ProjectReference Include="..\Modules\Access\ContainerControl.Modules.Access.Infrastructure\ContainerControl.Modules.Access.Infrastructure.csproj" />
+    <ProjectReference Include="..\Modules\Platform\ContainerControl.Modules.Platform\ContainerControl.Modules.Platform.csproj" />
+    <ProjectReference Include="..\Modules\Registries\ContainerControl.Modules.Registries\ContainerControl.Modules.Registries.csproj" />
+    <ProjectReference Include="..\Modules\Applications\ContainerControl.Modules.Applications\ContainerControl.Modules.Applications.csproj" />
+    <ProjectReference Include="..\Modules\Delivery\ContainerControl.Modules.Delivery\ContainerControl.Modules.Delivery.csproj" />
+    <ProjectReference Include="..\Modules\Edge\ContainerControl.Modules.Edge\ContainerControl.Modules.Edge.csproj" />
+    <ProjectReference Include="..\Modules\Runtime\ContainerControl.Modules.Runtime\ContainerControl.Modules.Runtime.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.12" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" Version="10.0.12" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.19.1" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.19.1" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.19.0" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.19.0" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Runtime" Version="1.19.0" />
+    <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
+  </ItemGroup>
+
+</Project>

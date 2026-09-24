@@ -1,0 +1,43 @@
+# Permission catalog
+
+Operators compose roles from these codes. The API and the Angular app check the code. They do not check a role name. Identity's built-in role table is not the authorization model.
+
+A new product capability needs a new code in `PermissionCatalog` and a check at the endpoint. A new role is a row, not a code change. After a role change, the user signs in again so the cookie picks up the new codes.
+
+| Code | Module |
+| --- | --- |
+| `access.users.read` | Access |
+| `access.users.manage` | Access |
+| `access.teams.manage` | Access |
+| `access.roles.manage` | Access |
+| `access.tokens.manage` | Access |
+| `access.breakglass.grant` | Access |
+| `access.audit.read` | Access |
+| `platform.hosts.manage` | Platform |
+| `platform.quotas.manage` | Platform |
+| `platform.settings.manage` | Platform |
+| `platform.capacity.read` | Platform |
+| `registries.read` | Registries |
+| `registries.manage` | Registries |
+| `apps.read` | Applications |
+| `apps.write` | Applications |
+| `secrets.read` | Secrets |
+| `secrets.manage` | Secrets |
+| `secrets.manage.prod` | Secrets |
+| `deploy.execute` | Delivery |
+| `deploy.approve` | Delivery |
+| `deploy.rollback` | Delivery |
+| `edge.certs.manage` | Edge |
+| `edge.dns.manage` | Edge |
+| `runtime.logs.read` | Runtime |
+| `runtime.stats.read` | Runtime |
+| `runtime.control` | Runtime |
+
+`GET /permissions` returns the catalog for a caller with `access.roles.manage`. `GET /me/permissions` returns the signed-in user's codes. Role create, update, and delete use `access.roles.manage`. User create, disable, and role assignment use `access.users.manage`.
+
+Development sample roles, created only when `ASPNETCORE_ENVIRONMENT` is `Development`:
+
+- Platform administrator: every catalog code.
+- Developer: `apps.read`, `apps.write`, `secrets.read`, `secrets.manage`, `deploy.execute`, `deploy.rollback`, `registries.read`, `runtime.logs.read`, `runtime.stats.read`, `runtime.control`.
+
+The developer role does not include `platform.hosts.manage`. The Hosts nav item uses that same code.

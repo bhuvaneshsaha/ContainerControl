@@ -1,0 +1,23 @@
+<h1>Allowed domains</h1>
+<p>DNS records stay at the provider. This list only allows hostnames under a name that already points at the public IP.</p>
+<form [formGroup]="form" (ngSubmit)="save()">
+  <label for="domain-name">Domain</label>
+  <input id="domain-name" formControlName="name" />
+  <button type="submit">Save domain</button>
+</form>
+@if (message()) {
+  <p role="alert">{{ message() }}</p>
+}
+@if (status() === 'loading') {
+  <p>Loading allowed domains.</p>
+} @else if (status() === 'error') {
+  <p>Allowed domains could not be loaded.</p>
+} @else if (domains().length === 0) {
+  <p>No domains are allowed yet.</p>
+} @else {
+  <ul>
+    @for (domain of domains(); track domain.id) {
+      <li>{{ domain.name }}</li>
+    }
+  </ul>
+}

@@ -1,0 +1,94 @@
+# Local control-plane dependencies.
+# scripts/dev-setup starts only postgres unless you pass --profile.
+# infisical, traefik, and otel-collector stay behind profiles.
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: containercontrol
+      POSTGRES_PASSWORD: containercontrol
+      POSTGRES_DB: containercontrol
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U containercontrol -d containercontrol"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    volumes:
+      - containercontrol-postgres:/var/lib/postgresql/data
+
+  infisical-db:
+    profiles: ["infisical"]
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: infisical
+      POSTGRES_PASSWORD: infisical
+      POSTGRES_DB: infisical
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U infisical -d infisical"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  infisical-redis:
+    profiles: ["infisical"]
+    image: redis:7-alpine
+
+  infisical:
+    profiles: ["infisical"]
+    image: infisical/infisical:v0.165.16
+    depends_on:
+      infisical-db:
+        condition: service_healthy
+      infisical-redis:
+        condition: service_started
+    environment:
+      NODE_ENV: production
+      ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef
+      AUTH_SECRET: local-dev-auth-secret-not-for-production
+      DB_CONNECTION_URI: postgresql://infisical:infisical@infisical-db:5432/infisical
+      REDIS_URL: redis://infisical-redis:6379
+      SITE_URL: http://localhost:8080
+    ports:
+      - "8080:8080"
+
+  traefik:
+    profiles: ["traefik"]
+    image: traefik:v3.6
+    container_name: cc-traefik
+    command:
+      - "--api.insecure=false"
+      - "--ping=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=edge"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - cc-traefik-acme:/letsencrypt
+    networks:
+      - edge
+
+  otel-collector:
+    profiles: ["observability"]
+    image: otel/opentelemetry-collector:0.128.0
+    command: ["--config=/etc/otel/config.yaml"]
+    volumes:
+      - ./otel-collector.yaml:/etc/otel/config.yaml:ro
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+
+volumes:
+  containercontrol-postgres:
+  cc-traefik-acme:
+
+networks:
+  edge:
+    name: edge

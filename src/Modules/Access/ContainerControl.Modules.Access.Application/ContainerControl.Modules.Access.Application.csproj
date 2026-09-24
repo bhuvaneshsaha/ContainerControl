@@ -1,0 +1,19 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>ContainerControl.Modules.Access.Application</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ContainerControl.Modules.Access.Domain\ContainerControl.Modules.Access.Domain.csproj" />
+    <ProjectReference Include="..\..\..\Shared\ContainerControl.SharedKernel\ContainerControl.SharedKernel.csproj" />
+  </ItemGroup>
+
+</Project>
