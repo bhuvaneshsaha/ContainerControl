@@ -92,7 +92,7 @@ Permission codes are listed in [docs/permissions.md](docs/permissions.md). Modul
 
 ## Production
 
-[docs/production-setup.md](docs/production-setup.md) lists the manual steps still ahead. Hyper-V, DNS, firewall rules, Docker Engine install, and the Infisical machine identity are not automated.
+[docs/production-setup.md](docs/production-setup.md) lists the manual steps the product still cannot do, then the steps you finish in the app. [docs/threat-model.md](docs/threat-model.md) records the boundaries the API enforces. Hyper-V, DNS writes, firewall rules, Docker Engine install, the Infisical machine identity, registry credential creation, data-tier databases, commercial certificates, and Docker client-certificate rotation stay manual.
 
 ## Tests
 

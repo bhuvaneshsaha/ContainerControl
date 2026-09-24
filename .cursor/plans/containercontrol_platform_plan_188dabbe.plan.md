@@ -21,8 +21,8 @@ todos:
     content: Stats, start/stop/restart, API tokens, the deploy webhook, and the SignalR log tail are in place.
     status: completed
   - id: harden
-    content: Tests, local setup scripts, and the production setup guide exist. Threat-model notes and the guide's remaining manual steps are still outstanding.
-    status: pending
+    content: Threat-model notes are in docs/threat-model.md. The production setup guide lists the manual steps the product still cannot do.
+    status: completed
 isProject: false
 ---
 
