@@ -4,11 +4,8 @@
   <input id="host-name" formControlName="name" />
   <label for="host-endpoint">Engine endpoint</label>
   <input id="host-endpoint" formControlName="endpoint" />
-  <button type="submit">Register host</button>
+  <button type="submit" [disabled]="busy() !== null">{{ busy() === 'register' ? 'Registering…' : 'Register host' }}</button>
 </form>
-@if (message()) {
-  <p role="alert">{{ message() }}</p>
-}
 @if (status() === 'loading') {
   <p>Loading Docker hosts.</p>
 } @else if (status() === 'error') {
@@ -23,8 +20,8 @@
         @if (host.engineVersion) {
           <span>Engine {{ host.engineVersion }}</span>
         }
-        <button type="button" (click)="ping(host)">Ping</button>
-        <button type="button" (click)="prepare(host)">Prepare edge</button>
+        <button type="button" [disabled]="busy() !== null" (click)="ping(host)">{{ busy() === 'ping:' + host.id ? 'Pinging…' : 'Ping' }}</button>
+        <button type="button" [disabled]="busy() !== null" (click)="prepare(host)">{{ busy() === 'prepare:' + host.id ? 'Preparing…' : 'Prepare edge' }}</button>
       </li>
     }
   </ul>

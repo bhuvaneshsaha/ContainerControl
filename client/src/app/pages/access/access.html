@@ -1,7 +1,4 @@
 <h1>Access</h1>
-@if (message()) {
-  <p role="alert">{{ message() }}</p>
-}
 @if (status() === 'loading') {
   <p>Loading access.</p>
 } @else if (status() === 'error') {
@@ -23,7 +20,7 @@
           <option [value]="role.id">{{ role.name }}</option>
         }
       </select>
-      <button type="submit">Create user</button>
+      <button type="submit" [disabled]="busy() !== null">{{ busy() === 'user' ? 'Creating…' : 'Create user' }}</button>
     </form>
     @if (users().length === 0) {
       <p>No users are provisioned yet.</p>
@@ -35,7 +32,7 @@
             @if (user.disabled) {
               <span>Disabled</span>
             } @else {
-              <button type="button" (click)="disable(user)">Disable</button>
+              <button type="button" [disabled]="busy() !== null" (click)="disable(user)">{{ busy() === 'disable:' + user.id ? 'Disabling…' : 'Disable' }}</button>
             }
           </li>
         }
@@ -48,7 +45,7 @@
     <form [formGroup]="teamForm" (ngSubmit)="createTeam()">
       <label for="team-name">Name</label>
       <input id="team-name" formControlName="name" />
-      <button type="submit">Create team</button>
+      <button type="submit" [disabled]="busy() !== null">{{ busy() === 'team' ? 'Creating…' : 'Create team' }}</button>
     </form>
     @if (teams().length === 0) {
       <p>No teams exist yet.</p>
@@ -75,7 +72,7 @@
           <option [value]="user.id">{{ user.displayName }}</option>
         }
       </select>
-      <button type="submit">Add member</button>
+      <button type="submit" [disabled]="busy() !== null">{{ busy() === 'member' ? 'Adding…' : 'Add member' }}</button>
     </form>
   </section>
 
@@ -97,7 +94,7 @@
           {{ permission.displayName }} ({{ permission.code }})
         </label>
       }
-      <button type="submit">Save role</button>
+      <button type="submit" [disabled]="busy() !== null">{{ busy() === 'role' ? 'Saving…' : 'Save role' }}</button>
     </form>
     @if (roles().length === 0) {
       <p>No roles exist yet.</p>
@@ -128,7 +125,7 @@
       </select>
       <label for="grant-minutes">Minutes</label>
       <input id="grant-minutes" type="number" min="5" max="60" formControlName="minutes" />
-      <button type="submit">Grant</button>
+      <button type="submit" [disabled]="busy() !== null">{{ busy() === 'grant' ? 'Granting…' : 'Grant' }}</button>
     </form>
     @if (grants().length === 0) {
       <p>No break-glass grants are active.</p>

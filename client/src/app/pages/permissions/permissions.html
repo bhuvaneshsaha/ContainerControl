@@ -1,14 +1,33 @@
-<h1>Permissions</h1>
+<h1>My access</h1>
+<p>These permissions decide which pages and actions this account can use.</p>
 @if (status() === 'loading') {
   <p>Loading permissions.</p>
 } @else if (status() === 'error') {
   <p>Permissions could not be loaded.</p>
+  <button type="button" (click)="load()">Retry</button>
 } @else if (permissions().length === 0) {
-  <p>This account has no permissions.</p>
+  <p>This account has no permissions. Ask an administrator to assign a role.</p>
 } @else {
-  <ul>
-    @for (code of permissions(); track code) {
-      <li>{{ code }}</li>
-    }
-  </ul>
+  @if (homePath() !== '/permissions') {
+    <p><a [routerLink]="homePath()">Continue to {{ homeName() }}</a></p>
+  }
+  @for (group of groups(); track group.module) {
+    <section>
+      <h2>{{ group.module }}</h2>
+      <ul>
+        @for (item of group.items; track item.code) {
+          <li>
+            {{ item.displayName }}
+            @if (item.description) {
+              <span>— {{ item.description }}</span>
+            }
+            @if (item.opens) {
+              <span>Opens {{ item.opens }}.</span>
+            }
+            <code class="permission-code">{{ item.code }}</code>
+          </li>
+        }
+      </ul>
+    </section>
+  }
 }

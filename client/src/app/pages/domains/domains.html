@@ -3,11 +3,8 @@
 <form [formGroup]="form" (ngSubmit)="save()">
   <label for="domain-name">Domain</label>
   <input id="domain-name" formControlName="name" />
-  <button type="submit">Save domain</button>
+  <button type="submit" [disabled]="busy() !== null">{{ busy() === 'save' ? 'Saving…' : 'Save domain' }}</button>
 </form>
-@if (message()) {
-  <p role="alert">{{ message() }}</p>
-}
 @if (status() === 'loading') {
   <p>Loading allowed domains.</p>
 } @else if (status() === 'error') {

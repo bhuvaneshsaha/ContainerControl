@@ -15,6 +15,9 @@ import {
   UserListResponse,
   UserSummary,
 } from '../../core/api-models';
+import { runBusy } from '../../core/busy';
+import { ConfirmService } from '../../core/confirm';
+import { FeedbackService } from '../../core/feedback';
 import { PermissionService } from '../../core/permissions';
 import { problemMessage } from '../../core/problem-message';
 import { HasPermission } from '../../shared/has-permission';
@@ -27,9 +30,11 @@ import { HasPermission } from '../../shared/has-permission';
 export class Access {
   private readonly http = inject(HttpClient);
   private readonly permissions = inject(PermissionService);
+  private readonly feedback = inject(FeedbackService);
+  private readonly confirm = inject(ConfirmService);
 
   readonly status = signal<'loading' | 'ready' | 'error'>('loading');
-  readonly message = signal('');
+  readonly busy = signal<string | null>(null);
   readonly users = signal<readonly UserSummary[]>([]);
   readonly teams = signal<{ id: string; name: string }[]>([]);
   readonly roles = signal<readonly RoleSummary[]>([]);
@@ -112,81 +117,105 @@ export class Access {
   }
 
   async createUser(): Promise<void> {
-    this.message.set('');
+    this.feedback.clear();
     if (this.userForm.invalid) {
-      this.message.set('Enter an email, a display name, and a password.');
+      this.userForm.markAllAsTouched();
+      this.feedback.error('Enter an email, a display name, and a password.');
       return;
     }
 
     const value = this.userForm.getRawValue();
-    try {
-      const created = await firstValueFrom(
-        this.http.post<{ id: string }>(`${environment.apiUrl}/access/users`, {
-          email: value.email.trim(),
-          displayName: value.displayName.trim(),
-          password: value.password,
-        }),
-      );
-      if (value.roleId) {
-        await firstValueFrom(
-          this.http.put(`${environment.apiUrl}/access/users/${created.id}/roles`, { roleIds: [value.roleId] }),
+    await runBusy(this.busy, 'user', async () => {
+      try {
+        const created = await firstValueFrom(
+          this.http.post<{ id: string }>(`${environment.apiUrl}/access/users`, {
+            email: value.email.trim(),
+            displayName: value.displayName.trim(),
+            password: value.password,
+          }),
         );
+        if (value.roleId) {
+          await firstValueFrom(
+            this.http.put(`${environment.apiUrl}/access/users/${created.id}/roles`, { roleIds: [value.roleId] }),
+          );
+        }
+        this.userForm.reset({ email: '', displayName: '', password: '', roleId: '' });
+        this.feedback.success(`${value.displayName.trim()} was created.`);
+        await this.load();
+      } catch (error) {
+        this.feedback.error(problemMessage(error, 'The user could not be created.'));
       }
-      this.userForm.reset({ email: '', displayName: '', password: '', roleId: '' });
-      await this.load();
-    } catch (error) {
-      this.message.set(problemMessage(error, 'The user could not be created.'));
-    }
+    });
   }
 
   async disable(user: UserSummary): Promise<void> {
-    this.message.set('');
-    try {
-      await firstValueFrom(this.http.post(`${environment.apiUrl}/access/users/${user.id}/disable`, {}));
-      await this.load();
-    } catch (error) {
-      this.message.set(problemMessage(error, 'The user could not be disabled.'));
-    }
-  }
-
-  async createTeam(): Promise<void> {
-    this.message.set('');
-    if (this.teamForm.invalid) {
-      this.message.set('Enter a team name.');
+    const confirmed = await this.confirm.ask({
+      title: `Disable ${user.displayName}?`,
+      body: `${user.displayName} (${user.email}) will not be able to sign in. This page cannot enable the account again.`,
+      confirmLabel: 'Disable user',
+      irreversible: true,
+    });
+    if (!confirmed) {
       return;
     }
 
-    try {
-      await firstValueFrom(
-        this.http.post(`${environment.apiUrl}/access/teams`, { name: this.teamForm.controls.name.value.trim() }),
-      );
-      this.teamForm.reset({ name: '' });
-      await this.load();
-    } catch (error) {
-      this.message.set(problemMessage(error, 'The team could not be created.'));
+    await runBusy(this.busy, `disable:${user.id}`, async () => {
+      this.feedback.clear();
+      try {
+        await firstValueFrom(this.http.post(`${environment.apiUrl}/access/users/${user.id}/disable`, {}));
+        this.feedback.success(`${user.displayName} was disabled.`);
+        await this.load();
+      } catch (error) {
+        this.feedback.error(problemMessage(error, 'The user could not be disabled.'));
+      }
+    });
+  }
+
+  async createTeam(): Promise<void> {
+    this.feedback.clear();
+    if (this.teamForm.invalid) {
+      this.teamForm.markAllAsTouched();
+      this.feedback.error('Enter a team name.');
+      return;
     }
+
+    const name = this.teamForm.controls.name.value.trim();
+    await runBusy(this.busy, 'team', async () => {
+      try {
+        await firstValueFrom(this.http.post(`${environment.apiUrl}/access/teams`, { name }));
+        this.teamForm.reset({ name: '' });
+        this.feedback.success(`Team ${name} was created.`);
+        await this.load();
+      } catch (error) {
+        this.feedback.error(problemMessage(error, 'The team could not be created.'));
+      }
+    });
   }
 
   async addMember(): Promise<void> {
-    this.message.set('');
+    this.feedback.clear();
     if (this.memberForm.invalid) {
-      this.message.set('Select a team and a user.');
+      this.memberForm.markAllAsTouched();
+      this.feedback.error('Select a team and a user.');
       return;
     }
 
     const value = this.memberForm.getRawValue();
-    try {
-      await firstValueFrom(this.http.post(`${environment.apiUrl}/access/teams/${value.teamId}/members`, { userId: value.userId }));
-      this.message.set('The user was added to the team.');
-    } catch (error) {
-      this.message.set(problemMessage(error, 'The user could not be added to the team.'));
-    }
+    await runBusy(this.busy, 'member', async () => {
+      try {
+        await firstValueFrom(this.http.post(`${environment.apiUrl}/access/teams/${value.teamId}/members`, { userId: value.userId }));
+        this.feedback.success('The user was added to the team.');
+      } catch (error) {
+        this.feedback.error(problemMessage(error, 'The user could not be added to the team.'));
+      }
+    });
   }
 
   async saveRole(): Promise<void> {
-    this.message.set('');
+    this.feedback.clear();
     if (this.roleForm.invalid) {
-      this.message.set('Enter a role name.');
+      this.roleForm.markAllAsTouched();
+      this.feedback.error('Enter a role name.');
       return;
     }
 
@@ -197,19 +226,22 @@ export class Access {
       permissionCodes: this.selectedCodes(),
     };
     const roleId = this.editingRoleId();
-    try {
-      if (roleId) {
-        await firstValueFrom(this.http.put(`${environment.apiUrl}/access/roles/${roleId}`, body));
-      } else {
-        await firstValueFrom(this.http.post(`${environment.apiUrl}/access/roles`, body));
+    await runBusy(this.busy, 'role', async () => {
+      try {
+        if (roleId) {
+          await firstValueFrom(this.http.put(`${environment.apiUrl}/access/roles/${roleId}`, body));
+        } else {
+          await firstValueFrom(this.http.post(`${environment.apiUrl}/access/roles`, body));
+        }
+        this.editingRoleId.set(null);
+        this.selectedCodes.set([]);
+        this.roleForm.reset({ name: '', description: '' });
+        this.feedback.success(`Role ${body.name} was saved.`);
+        await this.load();
+      } catch (error) {
+        this.feedback.error(problemMessage(error, 'The role could not be saved.'));
       }
-      this.editingRoleId.set(null);
-      this.selectedCodes.set([]);
-      this.roleForm.reset({ name: '', description: '' });
-      await this.load();
-    } catch (error) {
-      this.message.set(problemMessage(error, 'The role could not be saved.'));
-    }
+    });
   }
 
   private async loadUsers(): Promise<void> {
@@ -233,26 +265,29 @@ export class Access {
   }
 
   async grant(): Promise<void> {
-    this.message.set('');
+    this.feedback.clear();
     if (this.grantForm.invalid) {
-      this.message.set('Enter a user, a catalog permission, and 5 to 60 minutes.');
+      this.grantForm.markAllAsTouched();
+      this.feedback.error('Enter a user, a catalog permission, and 5 to 60 minutes.');
       return;
     }
 
     const value = this.grantForm.getRawValue();
-    try {
-      await firstValueFrom(
-        this.http.post(`${environment.apiUrl}/access/break-glass`, {
-          userId: value.userId.trim(),
-          permissionCode: value.permissionCode,
-          minutes: value.minutes,
-        }),
-      );
-      this.message.set('The grant was saved. It is checked by the permission API.');
-      await this.load();
-    } catch (error) {
-      this.message.set(problemMessage(error, 'The grant could not be saved.'));
-    }
+    await runBusy(this.busy, 'grant', async () => {
+      try {
+        await firstValueFrom(
+          this.http.post(`${environment.apiUrl}/access/break-glass`, {
+            userId: value.userId.trim(),
+            permissionCode: value.permissionCode,
+            minutes: value.minutes,
+          }),
+        );
+        this.feedback.success('The grant was saved. It is checked by the permission API.');
+        await this.load();
+      } catch (error) {
+        this.feedback.error(problemMessage(error, 'The grant could not be saved.'));
+      }
+    });
   }
 
   private async loadGrants(): Promise<void> {

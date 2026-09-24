@@ -25,11 +25,8 @@
   <input id="registry-access-key" formControlName="accessKeyId" />
   <label for="registry-secret-key">ECR secret access key</label>
   <input id="registry-secret-key" type="password" formControlName="secretAccessKey" />
-  <button type="submit">Save registry</button>
+  <button type="submit" [disabled]="busy() !== null">{{ busy() === 'save' ? 'Saving…' : 'Save registry' }}</button>
 </form>
-@if (message()) {
-  <p role="alert">{{ message() }}</p>
-}
 @if (status() === 'loading') {
   <p>Loading registries.</p>
 } @else if (status() === 'error') {

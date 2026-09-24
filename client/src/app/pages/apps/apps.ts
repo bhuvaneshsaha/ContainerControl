@@ -6,9 +6,15 @@ import { firstValueFrom } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
 import { AppListResponse, AppResponse, HostListResponse, SecretListResponse, SecretResponse, TeamListResponse } from '../../core/api-models';
+import { runBusy } from '../../core/busy';
+import { ConfirmService } from '../../core/confirm';
+import { FeedbackService } from '../../core/feedback';
 import { appendLogLine, startLogTail } from '../../core/log-tail';
+import { PermissionService } from '../../core/permissions';
 import { problemMessage } from '../../core/problem-message';
 import { HasPermission } from '../../shared/has-permission';
+
+type AppAction = 'deploy' | 'approve' | 'start' | 'stop' | 'restart' | 'rollback';
 
 @Component({
   selector: 'app-apps',
@@ -17,10 +23,13 @@ import { HasPermission } from '../../shared/has-permission';
 })
 export class Apps {
   private readonly http = inject(HttpClient);
+  private readonly feedback = inject(FeedbackService);
+  private readonly confirm = inject(ConfirmService);
+  private readonly permissions = inject(PermissionService);
   private logConnection: HubConnection | null = null;
 
   readonly status = signal<'loading' | 'ready' | 'error'>('loading');
-  readonly message = signal('');
+  readonly busy = signal<string | null>(null);
   readonly detail = signal('');
   readonly apps = signal<readonly AppResponse[]>([]);
   readonly teams = signal<{ id: string; name: string }[]>([]);
@@ -48,6 +57,22 @@ export class Apps {
     void this.load();
   }
 
+  actionKey(app: AppResponse, action: AppAction): string {
+    return `${action}:${app.id}`;
+  }
+
+  secretWriteState(app: AppResponse): 'form' | 'prod' | 'hidden' {
+    if (!this.permissions.hasPermission('secrets.manage')) {
+      return 'hidden';
+    }
+
+    if (app.environment === 'prod' && !this.permissions.hasPermission('secrets.manage.prod')) {
+      return 'prod';
+    }
+
+    return 'form';
+  }
+
   async load(): Promise<void> {
     this.status.set('loading');
     try {
@@ -66,33 +91,39 @@ export class Apps {
   }
 
   async create(): Promise<void> {
-    this.message.set('');
+    this.feedback.clear();
     if (this.form.invalid) {
-      this.message.set('Enter a name, team, host, and a compose file.');
+      this.form.markAllAsTouched();
+      this.feedback.error('Enter a name, team, host, and a compose file.');
       return;
     }
 
     const value = this.form.getRawValue();
-    try {
-      await firstValueFrom(
-        this.http.post(`${environment.apiUrl}/apps`, {
-          ...value,
-          internalPort: value.internalPort ? Number(value.internalPort) : null,
-          hostname: value.hostname || null,
-          image: null,
-          composeYaml: value.composeYaml,
-          requiresApproval: value.environment === 'prod' || value.requireApproval,
-        }),
-      );
-      await this.load();
-    } catch (error) {
-      this.message.set(problemMessage(error, 'The application could not be saved.'));
-    }
+    await runBusy(this.busy, 'create', async () => {
+      try {
+        await firstValueFrom(
+          this.http.post(`${environment.apiUrl}/apps`, {
+            ...value,
+            internalPort: value.internalPort ? Number(value.internalPort) : null,
+            hostname: value.hostname || null,
+            image: null,
+            composeYaml: value.composeYaml,
+            requiresApproval: value.environment === 'prod' || value.requireApproval,
+          }),
+        );
+        this.feedback.success(`${value.name.trim()} was saved.`);
+        await this.load();
+      } catch (error) {
+        this.feedback.error(problemMessage(error, 'The application could not be saved.'));
+      }
+    });
   }
 
-  async openSecrets(app: AppResponse): Promise<void> {
+  async openSecrets(app: AppResponse, keepNotice = false): Promise<void> {
     this.selected.set(app);
-    this.message.set('');
+    if (!keepNotice) {
+      this.feedback.clear();
+    }
     try {
       const response = await firstValueFrom(
         this.http.get<SecretListResponse>(
@@ -102,38 +133,47 @@ export class Apps {
       this.secrets.set(response.secrets);
     } catch (error) {
       this.secrets.set([]);
-      this.message.set(problemMessage(error, 'Secrets could not be loaded.'));
+      this.feedback.error(problemMessage(error, 'Secrets could not be loaded.'));
     }
   }
 
   async saveSecret(): Promise<void> {
     const app = this.selected();
-    this.message.set('');
+    this.feedback.clear();
     if (!app || this.secretForm.invalid) {
-      this.message.set('Enter a secret name and value.');
+      this.secretForm.markAllAsTouched();
+      this.feedback.error('Enter a secret name and value.');
+      return;
+    }
+
+    if (this.secretWriteState(app) !== 'form') {
+      this.feedback.error('Production secrets need Manage production secrets.');
       return;
     }
 
     const value = this.secretForm.getRawValue();
-    try {
-      await firstValueFrom(
-        this.http.post(
-          `${environment.apiUrl}/secrets`,
-          {
-            teamId: app.teamId,
-            environment: app.environment,
-            name: value.name.trim(),
-            injectionMode: value.injectionMode,
-            value: value.value,
-          },
-          { observe: 'response', responseType: 'text' },
-        ),
-      );
-      this.secretForm.controls.value.setValue('');
-      await this.openSecrets(app);
-    } catch (error) {
-      this.message.set(problemMessage(error, 'The secret could not be saved.'));
-    }
+    await runBusy(this.busy, 'secret', async () => {
+      try {
+        await firstValueFrom(
+          this.http.post(
+            `${environment.apiUrl}/secrets`,
+            {
+              teamId: app.teamId,
+              environment: app.environment,
+              name: value.name.trim(),
+              injectionMode: value.injectionMode,
+              value: value.value,
+            },
+            { observe: 'response', responseType: 'text' },
+          ),
+        );
+        this.secretForm.controls.value.setValue('');
+        this.feedback.success(`Secret ${value.name.trim()} was saved.`);
+        await this.openSecrets(app, true);
+      } catch (error) {
+        this.feedback.error(problemMessage(error, 'The secret could not be saved.'));
+      }
+    });
   }
 
   async deleteSecret(secret: SecretResponse): Promise<void> {
@@ -142,69 +182,128 @@ export class Apps {
       return;
     }
 
-    this.message.set('');
-    try {
-      await firstValueFrom(this.http.delete(`${environment.apiUrl}/secrets/${secret.id}`));
-      await this.openSecrets(app);
-    } catch (error) {
-      this.message.set(problemMessage(error, 'The secret could not be deleted.'));
+    const confirmed = await this.confirm.ask({
+      title: `Delete secret ${secret.name}?`,
+      body: `The value for ${secret.name} is removed from ${app.name} and is not shown again.`,
+      confirmLabel: 'Delete secret',
+      irreversible: true,
+    });
+    if (!confirmed) {
+      return;
     }
+
+    await runBusy(this.busy, `delete:${secret.id}`, async () => {
+      this.feedback.clear();
+      try {
+        await firstValueFrom(this.http.delete(`${environment.apiUrl}/secrets/${secret.id}`));
+        this.feedback.success(`Secret ${secret.name} was deleted.`);
+        await this.openSecrets(app, true);
+      } catch (error) {
+        this.feedback.error(problemMessage(error, 'The secret could not be deleted.'));
+      }
+    });
   }
 
-  async act(app: AppResponse, action: 'deploy' | 'approve' | 'start' | 'stop' | 'restart' | 'rollback'): Promise<void> {
-    this.message.set('');
-    try {
-      await firstValueFrom(this.http.post(`${environment.apiUrl}/apps/${app.id}/${action}`, {}));
-      await this.load();
-    } catch (error) {
-      this.message.set(problemMessage(error, 'The application action could not be completed.'));
+  async act(app: AppResponse, action: AppAction): Promise<void> {
+    if (action === 'stop' || action === 'rollback') {
+      const confirmed = await this.confirm.ask(
+        action === 'stop'
+          ? {
+              title: `Stop ${app.name}?`,
+              body: `Running services for ${app.name} will stop. You can start them again.`,
+              confirmLabel: 'Stop application',
+            }
+          : {
+              title: `Roll back ${app.name}?`,
+              body: `This replaces the current release of ${app.name} with the last successful desired state.`,
+              confirmLabel: 'Roll back',
+              irreversible: true,
+            },
+      );
+      if (!confirmed) {
+        return;
+      }
     }
+
+    await runBusy(this.busy, this.actionKey(app, action), async () => {
+      this.feedback.clear();
+      try {
+        await firstValueFrom(this.http.post(`${environment.apiUrl}/apps/${app.id}/${action}`, {}));
+        this.feedback.success(actionResult(app.name, action));
+        await this.load();
+      } catch (error) {
+        this.feedback.error(problemMessage(error, 'The application action could not be completed.'));
+      }
+    });
   }
 
   async live(app: AppResponse): Promise<void> {
     this.detail.set('');
-    try {
-      await this.logConnection?.stop();
-      const csrf = await firstValueFrom(
-        this.http.get<{ token?: string }>(`${environment.apiUrl}/auth/csrf`),
-      );
-      if (!csrf.token) {
-        this.detail.set('The log stream could not be started.');
-        return;
-      }
+    await runBusy(this.busy, `live:${app.id}`, async () => {
+      try {
+        await this.logConnection?.stop();
+        const csrf = await firstValueFrom(
+          this.http.get<{ token?: string }>(`${environment.apiUrl}/auth/csrf`),
+        );
+        if (!csrf.token) {
+          this.feedback.error('The log stream could not be started.');
+          return;
+        }
 
-      this.logConnection = await startLogTail(app.id, csrf.token, (line) => {
-        this.detail.set(appendLogLine(this.detail(), line));
-      });
-    } catch (error) {
-      this.detail.set(problemMessage(error, 'The log stream could not be started.'));
-    }
+        this.logConnection = await startLogTail(app.id, csrf.token, (line) => {
+          this.detail.set(appendLogLine(this.detail(), line));
+        });
+      } catch (error) {
+        this.feedback.error(problemMessage(error, 'The log stream could not be started.'));
+      }
+    });
   }
 
   async logs(app: AppResponse): Promise<void> {
-    try {
-      const response = await firstValueFrom(
-        this.http.get<{ text: string }>(`${environment.apiUrl}/apps/${app.id}/logs`),
-      );
-      this.detail.set(response.text || 'This application has no log output yet.');
-    } catch (error) {
-      this.detail.set(problemMessage(error, 'Logs could not be loaded.'));
-    }
+    await runBusy(this.busy, `logs:${app.id}`, async () => {
+      try {
+        const response = await firstValueFrom(
+          this.http.get<{ text: string }>(`${environment.apiUrl}/apps/${app.id}/logs`),
+        );
+        this.detail.set(response.text || 'This application has no log output yet.');
+      } catch (error) {
+        this.feedback.error(problemMessage(error, 'Logs could not be loaded.'));
+      }
+    });
   }
 
   async stats(app: AppResponse): Promise<void> {
-    try {
-      const response = await firstValueFrom(
-        this.http.get<{ services: { service: string; cpuPercent: number; memoryBytes: number }[] }>(
-          `${environment.apiUrl}/apps/${app.id}/stats`,
-        ),
-      );
-      this.detail.set(
-        response.services.map((item) => `${item.service}: CPU ${item.cpuPercent}%, memory ${item.memoryBytes} bytes`).join('\n') ||
-          'No running services returned stats.',
-      );
-    } catch (error) {
-      this.detail.set(problemMessage(error, 'Stats could not be loaded.'));
-    }
+    await runBusy(this.busy, `stats:${app.id}`, async () => {
+      try {
+        const response = await firstValueFrom(
+          this.http.get<{ services: { service: string; cpuPercent: number; memoryBytes: number }[] }>(
+            `${environment.apiUrl}/apps/${app.id}/stats`,
+          ),
+        );
+        this.detail.set(
+          response.services.map((item) => `${item.service}: CPU ${item.cpuPercent}%, memory ${item.memoryBytes} bytes`).join('\n') ||
+            'No running services returned stats.',
+        );
+      } catch (error) {
+        this.feedback.error(problemMessage(error, 'Stats could not be loaded.'));
+      }
+    });
+  }
+}
+
+function actionResult(name: string, action: AppAction): string {
+  switch (action) {
+    case 'deploy':
+      return `${name} deploy finished.`;
+    case 'approve':
+      return `${name} was approved.`;
+    case 'start':
+      return `${name} is starting.`;
+    case 'stop':
+      return `${name} was stopped.`;
+    case 'restart':
+      return `${name} is restarting.`;
+    case 'rollback':
+      return `${name} was rolled back.`;
   }
 }

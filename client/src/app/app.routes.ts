@@ -1,6 +1,6 @@
 import { Routes } from '@angular/router';
 
-import { authGuard, permissionGuard, permissionGuardAny } from './core/auth-guard';
+import { authGuard, homeRedirectGuard, permissionGuard, permissionGuardAny } from './core/auth-guard';
 
 export const routes: Routes = [
   {
@@ -12,10 +12,10 @@ export const routes: Routes = [
     path: '',
     canActivate: [authGuard],
     children: [
-      { path: '', pathMatch: 'full', redirectTo: 'permissions' },
+      { path: '', pathMatch: 'full', canActivate: [homeRedirectGuard], children: [] },
       {
         path: 'permissions',
-        title: 'Permissions',
+        title: 'My access',
         loadComponent: () => import('./pages/permissions/permissions').then((module) => module.Permissions),
       },
       {

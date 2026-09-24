@@ -2,7 +2,7 @@
   <p class="product">ContainerControl</p>
   @if (signedIn()) {
     <nav aria-label="Primary">
-      <a routerLink="/permissions">Permissions</a>
+      <a routerLink="/permissions">My access</a>
       <a *appHasPermission="'apps.read'" routerLink="/apps">Applications</a>
       @if (canOpenAccess()) {
         <a routerLink="/access">Access</a>
@@ -19,5 +19,7 @@
   }
 </header>
 <main>
+  <app-feedback-banner />
   <router-outlet />
 </main>
+<app-confirm-dialog />

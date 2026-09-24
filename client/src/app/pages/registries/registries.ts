@@ -4,6 +4,8 @@ import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angula
 import { firstValueFrom } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
+import { runBusy } from '../../core/busy';
+import { FeedbackService } from '../../core/feedback';
 import { problemMessage } from '../../core/problem-message';
 import { HasPermission } from '../../shared/has-permission';
 
@@ -26,10 +28,11 @@ interface RegistryListResponse {
 })
 export class Registries {
   private readonly http = inject(HttpClient);
+  private readonly feedback = inject(FeedbackService);
 
   readonly kinds = ['Acr', 'Ecr', 'DockerHub', 'Harbor'] as const;
   readonly status = signal<'loading' | 'ready' | 'error'>('loading');
-  readonly message = signal('');
+  readonly busy = signal<string | null>(null);
   readonly registries = signal<readonly RegistryResponse[]>([]);
   readonly form = new FormGroup({
     name: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
@@ -58,21 +61,24 @@ export class Registries {
   }
 
   async save(): Promise<void> {
-    this.message.set('');
+    this.feedback.clear();
     if (this.form.invalid) {
-      this.message.set('Enter a name, type, and host.');
+      this.form.markAllAsTouched();
+      this.feedback.error('Enter a name, type, and host.');
       return;
     }
 
     const value = this.form.getRawValue();
-    try {
-      await firstValueFrom(this.http.post(`${environment.apiUrl}/registries`, value));
-      this.form.controls.password.setValue('');
-      this.form.controls.secretAccessKey.setValue('');
-      this.message.set('The registry connection was saved. The password is not shown again.');
-      await this.load();
-    } catch (error) {
-      this.message.set(problemMessage(error, 'The registry could not be saved.'));
-    }
+    await runBusy(this.busy, 'save', async () => {
+      try {
+        await firstValueFrom(this.http.post(`${environment.apiUrl}/registries`, value));
+        this.form.controls.password.setValue('');
+        this.form.controls.secretAccessKey.setValue('');
+        this.feedback.success('The registry connection was saved. The password is not shown again.');
+        await this.load();
+      } catch (error) {
+        this.feedback.error(problemMessage(error, 'The registry could not be saved.'));
+      }
+    });
   }
 }

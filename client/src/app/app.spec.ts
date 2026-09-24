@@ -23,7 +23,7 @@ describe('App', () => {
 
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.querySelector('.product')?.textContent).toContain('ContainerControl');
-    expect(compiled.textContent).toContain('Permissions');
+    expect(compiled.textContent).toContain('My access');
     expect(compiled.textContent).toContain('Applications');
     expect(compiled.textContent).not.toContain('Hosts');
     expect(compiled.querySelector('main')).not.toBeNull();

@@ -5,6 +5,8 @@ import { firstValueFrom } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
 import { DomainListResponse, DomainResponse } from '../../core/api-models';
+import { runBusy } from '../../core/busy';
+import { FeedbackService } from '../../core/feedback';
 import { problemMessage } from '../../core/problem-message';
 
 @Component({
@@ -14,9 +16,10 @@ import { problemMessage } from '../../core/problem-message';
 })
 export class Domains {
   private readonly http = inject(HttpClient);
+  private readonly feedback = inject(FeedbackService);
 
   readonly status = signal<'loading' | 'ready' | 'error'>('loading');
-  readonly message = signal('');
+  readonly busy = signal<string | null>(null);
   readonly domains = signal<readonly DomainResponse[]>([]);
   readonly form = new FormGroup({
     name: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
@@ -38,23 +41,28 @@ export class Domains {
   }
 
   async save(): Promise<void> {
-    this.message.set('');
+    this.feedback.clear();
     if (this.form.invalid) {
-      this.message.set('Enter a domain name.');
+      this.form.markAllAsTouched();
+      this.feedback.error('Enter a domain name.');
       return;
     }
 
-    try {
-      await firstValueFrom(
-        this.http.post(`${environment.apiUrl}/edge/domains`, this.form.getRawValue(), {
-          observe: 'response',
-          responseType: 'text',
-        }),
-      );
-      this.form.controls.name.setValue('');
-      await this.load();
-    } catch (error) {
-      this.message.set(problemMessage(error, 'The domain could not be saved.'));
-    }
+    const name = this.form.controls.name.value.trim();
+    await runBusy(this.busy, 'save', async () => {
+      try {
+        await firstValueFrom(
+          this.http.post(`${environment.apiUrl}/edge/domains`, { name }, {
+            observe: 'response',
+            responseType: 'text',
+          }),
+        );
+        this.form.controls.name.setValue('');
+        this.feedback.success(`${name} was saved.`);
+        await this.load();
+      } catch (error) {
+        this.feedback.error(problemMessage(error, 'The domain could not be saved.'));
+      }
+    });
   }
 }
