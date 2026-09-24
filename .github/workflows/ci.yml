@@ -48,6 +48,12 @@ jobs:
       - name: Confirm Docker Engine
         run: docker info
 
+      # The runner's resolv.conf has an Azure search domain. Docker Engine copies
+      # that list into containers, so nslookup of an unqualified network alias
+      # such as "cache" fails. Remove the search line only; leave the engine as-is.
+      - name: Drop runner DNS search domain
+        run: sudo sed -i '/^search /d' /etc/resolv.conf
+
       - name: Integration tests
         run: dotnet test tests/ContainerControl.Host.IntegrationTests/ContainerControl.Host.IntegrationTests.csproj -c Release --no-build
 
