@@ -1,0 +1,71 @@
+# Merge gate for pull requests into main.
+# ubuntu-latest provides a Docker engine. Integration tests use Testcontainers.PostgreSql
+# and talk to unix:///var/run/docker.sock. This workflow stores no secrets.
+# Release and tag publishing is a follow-up workflow.
+
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      CI: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: 1
+      DOTNET_NOLOGO: 1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore ContainerControl.sln
+
+      - name: Build
+        run: dotnet build ContainerControl.sln -c Release --no-restore
+
+      - name: Confirm Docker for Testcontainers
+        run: docker info
+
+      - name: Integration tests
+        run: dotnet test tests/ContainerControl.Host.IntegrationTests/ContainerControl.Host.IntegrationTests.csproj -c Release --no-build
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+          package-manager-cache: false
+
+      - name: Install client dependencies
+        working-directory: client
+        run: npm ci
+
+      - name: Build client
+        working-directory: client
+        run: npm run build
+
+      # @angular/build:unit-test runs Vitest in jsdom. No browser provider is configured,
+      # so this stays non-interactive without client source changes. --watch=false forces
+      # a single run; CI=true does the same when the runner has no TTY.
+      - name: Client unit tests
+        working-directory: client
+        run: npm test -- --watch=false
