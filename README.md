@@ -74,7 +74,6 @@ When the database has no users, startup creates one administrator from host envi
 | `EDGE_ACME_EMAIL` | Optional Let's Encrypt account email |
 | `EDGE_HTTP_PORT` | Host port published for Traefik HTTP. Default `80` |
 | `EDGE_HTTPS_PORT` | Host port published for Traefik HTTPS. Default `443` |
-| `SECRETS_FILE_ROOT` | Directory for file-injected secrets on the Docker host. Default `/tmp/containercontrol-secrets` |
 
 There is no self-registration endpoint.
 
@@ -82,7 +81,7 @@ There is no self-registration endpoint.
 
 - Access: Identity cookie sign-in and sign-out, admin-provisioned users, teams, permission roles, the permission catalog, API token issuance, a break-glass table placeholder, and append-only audit.
 - Platform: Docker host registration and an Engine version ping. Preparing a host creates the `edge` network and the Traefik container.
-- Applications: desired state and secret references. Secret values are written to Infisical and are not stored in PostgreSQL.
+- Applications: desired state and secret references. Secret values are written to Infisical and are not stored in PostgreSQL. Deploy places them in the container as environment variables, or as files under `/run/secrets`, and fills `${SECRET}` placeholders in the compose environment and command.
 - Delivery: compose policy, deploy, start, stop, restart, rollback, and the CI webhook.
 - Edge: allowed domains and Traefik labels for an exposed hostname.
 - Runtime: log tail and container CPU and memory stats.

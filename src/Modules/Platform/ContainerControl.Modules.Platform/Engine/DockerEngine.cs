@@ -33,6 +33,8 @@ public interface IDockerEngine
 
     Task<string> CreateContainerAsync(DockerEndpoint endpoint, ContainerPlan plan, CancellationToken cancellationToken);
 
+    Task ExtractArchiveAsync(DockerEndpoint endpoint, string containerId, string destinationPath, Stream archive, CancellationToken cancellationToken);
+
     Task StartContainerAsync(DockerEndpoint endpoint, string containerId, CancellationToken cancellationToken);
 
     Task StopContainerAsync(DockerEndpoint endpoint, string containerId, CancellationToken cancellationToken);

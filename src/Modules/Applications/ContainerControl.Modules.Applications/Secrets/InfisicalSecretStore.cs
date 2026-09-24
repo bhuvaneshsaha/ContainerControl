@@ -16,11 +16,28 @@ public sealed class InfisicalSecretStore : ISecretStore
         _configuration = configuration;
     }
 
-    public Task WriteAsync(SecretAddress address, string value, CancellationToken cancellationToken) =>
-        SendAsync(address, HttpMethod.Post, value, cancellationToken);
+    public async Task WriteAsync(SecretAddress address, string value, CancellationToken cancellationToken)
+    {
+        var updated = await SendAsync(address, HttpMethod.Patch, value, cancellationToken);
+        if (updated == System.Net.HttpStatusCode.NotFound)
+        {
+            updated = await SendAsync(address, HttpMethod.Post, value, cancellationToken);
+        }
 
-    public Task DeleteAsync(SecretAddress address, CancellationToken cancellationToken) =>
-        SendAsync(address, HttpMethod.Delete, null, cancellationToken);
+        if ((int)updated is < 200 or > 299)
+        {
+            throw new SecretStoreException("Infisical did not accept the secret change.");
+        }
+    }
+
+    public async Task DeleteAsync(SecretAddress address, CancellationToken cancellationToken)
+    {
+        var status = await SendAsync(address, HttpMethod.Delete, null, cancellationToken);
+        if ((int)status is < 200 or > 299)
+        {
+            throw new SecretStoreException("Infisical did not accept the secret change.");
+        }
+    }
 
     public async Task<string?> ReadAsync(SecretAddress address, CancellationToken cancellationToken)
     {
@@ -28,7 +45,7 @@ public sealed class InfisicalSecretStore : ISecretStore
         var token = await LoginAsync(credential, cancellationToken);
         var name = SecretName(address.Path);
         var client = _httpClientFactory.CreateClient(nameof(InfisicalSecretStore));
-        var uri = $"{credential.SiteUrl.TrimEnd('/')}/api/v4/secrets/{Uri.EscapeDataString(name)}?projectId={Uri.EscapeDataString(credential.ProjectId)}&environment={Uri.EscapeDataString(address.Environment)}&secretPath=/";
+        var uri = $"{credential.SiteUrl.TrimEnd('/')}/api/v4/secrets/{Uri.EscapeDataString(name)}?projectId={Uri.EscapeDataString(credential.ProjectId)}&environment={Uri.EscapeDataString(address.Environment)}&secretPath=/&type=shared&viewSecretValue=true&expandSecretReferences=true";
         using var request = new HttpRequestMessage(HttpMethod.Get, uri);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         using var response = await client.SendAsync(request, cancellationToken);
@@ -39,10 +56,18 @@ public sealed class InfisicalSecretStore : ISecretStore
 
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
-        if (document.RootElement.TryGetProperty("secret", out var secret)
-            && secret.TryGetProperty("secretValue", out var secretValue))
+        if (document.RootElement.TryGetProperty("secret", out var secret))
         {
-            return secretValue.GetString();
+            if (secret.TryGetProperty("secretValueHidden", out var hidden)
+                && hidden.ValueKind == JsonValueKind.True)
+            {
+                throw new SecretStoreException("Infisical did not return the secret.");
+            }
+
+            if (secret.TryGetProperty("secretValue", out var secretValue))
+            {
+                return secretValue.GetString();
+            }
         }
 
         if (document.RootElement.TryGetProperty("secretValue", out var direct))
@@ -53,33 +78,29 @@ public sealed class InfisicalSecretStore : ISecretStore
         return null;
     }
 
-    private async Task SendAsync(SecretAddress address, HttpMethod method, string? value, CancellationToken cancellationToken)
+    private async Task<System.Net.HttpStatusCode> SendAsync(SecretAddress address, HttpMethod method, string? value, CancellationToken cancellationToken)
     {
         var credential = CredentialFor(address.Environment);
         var token = await LoginAsync(credential, cancellationToken);
         var name = SecretName(address.Path);
         var client = _httpClientFactory.CreateClient(nameof(InfisicalSecretStore));
-        var uri = $"{credential.SiteUrl.TrimEnd('/')}/api/v4/secrets/{Uri.EscapeDataString(name)}";
+        var uri = $"{credential.SiteUrl.TrimEnd('/')}/api/v4/secrets/{Uri.EscapeDataString(name)}?projectId={Uri.EscapeDataString(credential.ProjectId)}&environment={Uri.EscapeDataString(address.Environment)}&secretPath=/&type=shared";
         using var request = new HttpRequestMessage(method, uri);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        var payload = new Dictionary<string, string>
-        {
-            ["projectId"] = credential.ProjectId,
-            ["environment"] = address.Environment,
-            ["secretPath"] = "/",
-            ["type"] = "shared"
-        };
         if (value is not null)
         {
-            payload["secretValue"] = value;
+            request.Content = JsonContent.Create(new Dictionary<string, string>
+            {
+                ["projectId"] = credential.ProjectId,
+                ["environment"] = address.Environment,
+                ["secretPath"] = "/",
+                ["type"] = "shared",
+                ["secretValue"] = value
+            });
         }
 
-        request.Content = JsonContent.Create(payload);
         using var response = await client.SendAsync(request, cancellationToken);
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new SecretStoreException("Infisical did not accept the secret change.");
-        }
+        return response.StatusCode;
     }
 
     private async Task<string> LoginAsync(InfisicalCredential credential, CancellationToken cancellationToken)
@@ -87,7 +108,7 @@ public sealed class InfisicalSecretStore : ISecretStore
         var client = _httpClientFactory.CreateClient(nameof(InfisicalSecretStore));
         using var request = new HttpRequestMessage(HttpMethod.Post, $"{credential.SiteUrl.TrimEnd('/')}/api/v1/auth/universal-auth/login")
         {
-            Content = new FormUrlEncodedContent(new Dictionary<string, string>
+            Content = JsonContent.Create(new Dictionary<string, string>
             {
                 ["clientId"] = credential.ClientId,
                 ["clientSecret"] = credential.ClientSecret

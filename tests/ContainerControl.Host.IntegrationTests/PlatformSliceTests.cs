@@ -491,7 +491,7 @@ public sealed class PlatformSliceTests
     private sealed record TokenBody(Guid Id, string Token);
 }
 
-file sealed class InfisicalStandIn : IAsyncDisposable
+internal sealed class InfisicalStandIn : IAsyncDisposable
 {
     private readonly HttpListener _listener = new();
     private readonly Dictionary<string, string> _values = new(StringComparer.Ordinal);
@@ -539,12 +539,22 @@ file sealed class InfisicalStandIn : IAsyncDisposable
             var path = context.Request.Url?.AbsolutePath ?? string.Empty;
             if (path.EndsWith("/api/v1/auth/universal-auth/login", StringComparison.Ordinal))
             {
+                var contentType = context.Request.ContentType ?? string.Empty;
+                if (!contentType.Contains("json", StringComparison.OrdinalIgnoreCase))
+                {
+                    context.Response.StatusCode = 400;
+                    context.Response.Close();
+                    continue;
+                }
+
                 await Write(context, """{"accessToken":"test-token"}""");
                 continue;
             }
 
             var name = Uri.UnescapeDataString(path.Split('/').LastOrDefault() ?? string.Empty);
             var environment = "dev";
+            var reveal = false;
+            var expand = false;
             if (context.Request.Url?.Query is { Length: > 1 } query)
             {
                 var parsed = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(query);
@@ -552,11 +562,20 @@ file sealed class InfisicalStandIn : IAsyncDisposable
                 {
                     environment = values[0]!;
                 }
+
+                reveal = parsed.TryGetValue("viewSecretValue", out var view) && view.Count > 0 && view[0] == "true";
+                expand = parsed.TryGetValue("expandSecretReferences", out var references) && references.Count > 0 && references[0] == "true";
             }
 
             var key = environment + "/" + name;
             if (context.Request.HttpMethod == "GET")
             {
+                if (!reveal || !expand)
+                {
+                    await Write(context, "{\"secret\":{\"secretKey\":" + JsonSerializer.Serialize(name) + "}}");
+                    continue;
+                }
+
                 _values.TryGetValue(key, out var value);
                 await Write(context, "{\"secret\":{\"secretValue\":" + JsonSerializer.Serialize(value) + "}}");
             }
@@ -565,8 +584,30 @@ file sealed class InfisicalStandIn : IAsyncDisposable
                 _values.Remove(key);
                 await Write(context, "{}");
             }
+            else if (context.Request.HttpMethod == "PATCH")
+            {
+                if (!_values.ContainsKey(key))
+                {
+                    context.Response.StatusCode = 404;
+                    context.Response.Close();
+                    continue;
+                }
+
+                using var document = await JsonDocument.ParseAsync(context.Request.InputStream);
+                var env = document.RootElement.GetProperty("environment").GetString() ?? environment;
+                var value = document.RootElement.GetProperty("secretValue").GetString() ?? string.Empty;
+                _values[env + "/" + name] = value;
+                await Write(context, "{}");
+            }
             else
             {
+                if (_values.ContainsKey(key))
+                {
+                    context.Response.StatusCode = 400;
+                    context.Response.Close();
+                    continue;
+                }
+
                 using var document = await JsonDocument.ParseAsync(context.Request.InputStream);
                 var env = document.RootElement.GetProperty("environment").GetString() ?? "dev";
                 var value = document.RootElement.GetProperty("secretValue").GetString() ?? string.Empty;

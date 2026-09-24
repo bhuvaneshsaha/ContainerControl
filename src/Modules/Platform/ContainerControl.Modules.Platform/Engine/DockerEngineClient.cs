@@ -115,6 +115,21 @@ public sealed class DockerEngineClient : IDockerEngine
         return response.ID;
     }
 
+    public async Task ExtractArchiveAsync(
+        DockerEndpoint endpoint,
+        string containerId,
+        string destinationPath,
+        Stream archive,
+        CancellationToken cancellationToken)
+    {
+        using var client = Connect(endpoint);
+        await client.Containers.ExtractArchiveToContainerAsync(
+            containerId,
+            new ContainerPathStatParameters { Path = destinationPath },
+            archive,
+            cancellationToken);
+    }
+
     public async Task StartContainerAsync(DockerEndpoint endpoint, string containerId, CancellationToken cancellationToken)
     {
         using var client = Connect(endpoint);

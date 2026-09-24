@@ -208,7 +208,24 @@ public static class ComposePolicy
         {
             foreach (var entry in map.Children)
             {
-                values[Text(entry.Key)] = Text(entry.Value);
+                var key = Text(entry.Key);
+                if (key.Length > 0)
+                {
+                    values[key] = Text(entry.Value);
+                }
+            }
+        }
+
+        if (node is YamlSequenceNode sequence)
+        {
+            foreach (var item in sequence.Children)
+            {
+                var text = Text(item);
+                var split = text.IndexOf('=');
+                if (split > 0)
+                {
+                    values[text[..split]] = text[(split + 1)..];
+                }
             }
         }
 

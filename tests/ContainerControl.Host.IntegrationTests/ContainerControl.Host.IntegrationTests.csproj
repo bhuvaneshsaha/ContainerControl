@@ -18,6 +18,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Host\ContainerControl.Host.csproj" />
+    <ProjectReference Include="..\..\src\Modules\Applications\ContainerControl.Modules.Applications\ContainerControl.Modules.Applications.csproj" />
+    <ProjectReference Include="..\..\src\Modules\Delivery\ContainerControl.Modules.Delivery\ContainerControl.Modules.Delivery.csproj" />
     <ProjectReference Include="..\..\src\Modules\Access\ContainerControl.Modules.Access.Infrastructure\ContainerControl.Modules.Access.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\Modules\Platform\ContainerControl.Modules.Platform\ContainerControl.Modules.Platform.csproj" />
   </ItemGroup>
