@@ -6,7 +6,7 @@ Sign-in, permission checks, Docker host registration, secret references, deploys
 
 ## Local setup
 
-Prerequisites: .NET 10 SDK, Node.js 22 LTS, and Docker Engine. The setup scripts check those versions, start PostgreSQL from `deploy/local/compose.yaml`, and print the API and SPA commands. Infisical, Traefik, and the OpenTelemetry collector stay behind Compose profiles and are not started.
+Prerequisites: .NET 10 SDK, Node.js 22 LTS (`.nvmrc`; the client `package.json` `engines` field asks for the same major), and Docker Engine. The setup scripts check those versions, start PostgreSQL from `deploy/local/compose.yaml`, and print the API and SPA commands. Infisical, Traefik, and the OpenTelemetry collector stay behind Compose profiles and are not started. If the Docker host is nested and `overlay2` cannot start, see [Nested Docker host storage driver](docs/production-setup.md#nested-docker-host-storage-driver). The product does not choose the storage driver.
 
 ```bash
 ./scripts/dev-setup.sh
@@ -29,14 +29,17 @@ The API listens on `http://localhost:5080`. The SPA listens on `http://localhost
 
 The Development connection string is in `src/Host/appsettings.Development.json`. It matches the Compose PostgreSQL user and database. That password is local sample configuration, not a production secret.
 
-Infisical and Traefik stay behind Compose profiles until you ask for them. The API can also create the `edge` network and the Traefik container when an admin prepares a Docker host. Do not start the Traefik profile and prepare the same host at the same time; both want ports 80 and 443 and the name `cc-traefik`.
+Infisical, Traefik, and the OpenTelemetry collector stay behind Compose profiles until you ask for them. The API can also create the `edge` network and the Traefik container when an admin prepares a Docker host. Do not start the Traefik profile and prepare the same host at the same time; both want ports 80 and 443 and the name `cc-traefik`.
 
 ```bash
 ./scripts/dev-setup.sh --profile infisical
 ./scripts/dev-setup.sh --profile traefik
+./scripts/dev-setup.sh --profile observability
 ```
 
-The Infisical profile uses local sample credentials in `deploy/local/compose.yaml`. They are not production secrets. Creating the machine identity is still a manual step. Set the environment variables below before saving a secret.
+The `observability` profile starts the local OTLP collector on `4317` and `4318`. Details are in [docs/observability.md](docs/observability.md). The Infisical profile uses local sample credentials in `deploy/local/compose.yaml`. They are not production secrets. Creating the machine identity is still a manual step. Set the environment variables below before saving a secret.
+
+When `INFISICAL_SITE_URL` and that environment's client id, client secret, and project id are set, secret values go to Infisical. In Development only, if those credentials are absent, the API writes the value under `deploy/local/secret-store/` instead. That path is gitignored. It is not used outside Development: any other environment fails the write until Infisical is configured. PostgreSQL still stores the path, environment, and injection mode, and the API does not return the value.
 
 ### Development sample users
 
@@ -81,7 +84,7 @@ There is no self-registration endpoint.
 
 - Access: Identity cookie sign-in and sign-out, admin-provisioned users, teams, permission roles, the permission catalog, API token issuance, short-lived break-glass grants, and append-only audit. `POST /access/break-glass` with `access.breakglass.grant` adds one catalog permission for 5 to 60 minutes. The permission API and `/auth/session` include an unexpired grant. The cookie keeps assigned role permissions, so a grant expires without a new sign-in. A grant does not open a shell or the Docker socket. `GET /access/audit` lists the latest rows for `access.audit.read` and does not include secret values. The Access page creates and disables users, creates teams, edits roles from catalog checkboxes, grants break-glass access, and reads that audit.
 - Platform: Docker host registration and an Engine version ping. Preparing a host creates the `edge` network and the Traefik container. `PUT /platform/quotas/{teamId}` stores that team's CPU, memory, and storage quota. Deploy rejects a plan that omits those limits or exceeds the quota. `GET /platform/capacity` lists host CPU, memory, and storage. `POST /platform/capacity/{hostId}` reads them from the Engine. The Engine endpoint is not in that response.
-- Applications: desired state and secret references. Secret values are written to Infisical and are not stored in PostgreSQL. Deploy places them in the container as environment variables, or as files under `/run/secrets`, and fills `${SECRET}` placeholders in the compose environment and command. Creating a `prod` application sets approval required. Any environment can opt in with the same flag.
+- Applications: desired state and secret references. Secret values are written to Infisical when that environment's machine credentials are set, or to the Development file fallback above when they are not. They are not stored in PostgreSQL. Deploy places them in the container as environment variables, or as files under `/run/secrets`, and fills `${SECRET}` placeholders in the compose environment and command. Creating a `prod` application sets approval required. Any environment can opt in with the same flag.
 - Delivery: compose policy, deploy, start, stop, restart, rollback, and the CI webhook. `POST /apps/{id}/deploy` on an approval-required application stays `pending-approval` until a caller with `deploy.approve` calls `POST /apps/{id}/approve`. That caller does not have to be a member of the application's team. The Applications page shows Approve for a pending application when the signed-in user has that permission. A failed deploy is recorded with a short message. That message omits text that looks like a secret assignment. A compose healthcheck is applied on the container, and deploy waits for healthy before starting the services that depend on it.
 - Edge: allowed domains and Traefik labels for an exposed hostname. If prepare cannot reach the Engine, the API returns 502.
 - Runtime: a one-shot log read, a SignalR tail at `/hubs/logs` (`Tail` sends `log` events from the Engine log API), and container CPU and memory stats. The tail requires `runtime.logs.read` and team membership.
