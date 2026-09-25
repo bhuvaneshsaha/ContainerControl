@@ -39,9 +39,9 @@ public sealed class DeliveryDbContext : DbContext
         modelBuilder.Entity<WorkerLease>(entity =>
         {
             entity.ToTable("worker_lease");
-            entity.HasKey(lease => lease.Id);
+            entity.HasKey(lease => new { lease.ApplicationId, lease.Environment });
+            entity.Property(lease => lease.Environment).HasMaxLength(16).IsRequired();
             entity.Property<uint>("xmin").HasColumnType("xid").ValueGeneratedOnAddOrUpdate().IsConcurrencyToken();
-            entity.HasData(new WorkerLease { Id = 1 });
         });
     }
 }

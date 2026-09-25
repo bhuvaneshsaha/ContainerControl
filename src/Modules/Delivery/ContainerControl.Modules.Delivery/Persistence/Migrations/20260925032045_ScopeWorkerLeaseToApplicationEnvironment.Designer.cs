@@ -3,6 +3,7 @@ using System;
 using ContainerControl.Modules.Delivery.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace ContainerControl.Modules.Delivery.Persistence.Migrations
 {
     [DbContext(typeof(DeliveryDbContext))]
-    partial class DeliveryDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260925032045_ScopeWorkerLeaseToApplicationEnvironment")]
+    partial class ScopeWorkerLeaseToApplicationEnvironment
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

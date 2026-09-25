@@ -27,7 +27,9 @@ public sealed class DeploymentRecord
 
 public sealed class WorkerLease
 {
-    public int Id { get; set; }
+    public Guid ApplicationId { get; set; }
+
+    public string Environment { get; set; } = string.Empty;
 
     public Guid? OwnerId { get; set; }
 
