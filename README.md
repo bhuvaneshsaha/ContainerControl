@@ -2,7 +2,7 @@
 
 Self-service on-premises container control plane. Developers never receive VM or Docker socket access. This repository is the control plane: one ASP.NET Core host, one PostgreSQL database, and an online-only Angular app.
 
-Sign-in, permission checks, Docker host registration, secret references, deploys, Traefik labels, logs, and the CI webhook are in place. Decisions are recorded under [docs/adr](docs/adr).
+Sign-in, permission checks, Docker host registration, secret references, deploys, Traefik labels, logs, and the CI webhook are in place. Day-to-day use is in the [user guide](docs/user-guide.md). Decisions are recorded under [docs/adr](docs/adr).
 
 ## Local setup
 
