@@ -151,16 +151,16 @@ public sealed class ApplicationMaintenanceApiTests
             await delivery.SaveChangesAsync();
         }
 
-        var denied = await reader.DeleteAsync($"/apps/{appId}");
+        var denied = await reader.SendAsync(HttpMethod.Delete, $"/apps/{appId}");
         Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
-        var hidden = await outsider.DeleteAsync($"/apps/{appId}");
+        var hidden = await outsider.SendAsync(HttpMethod.Delete, $"/apps/{appId}");
         Assert.Equal(HttpStatusCode.NotFound, hidden.StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await developer.DeleteAsync($"/apps/{Guid.NewGuid()}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await developer.SendAsync(HttpMethod.Delete, $"/apps/{Guid.NewGuid()}")).StatusCode);
 
-        var removed = await developer.DeleteAsync($"/apps/{appId}");
+        var removed = await developer.SendAsync(HttpMethod.Delete, $"/apps/{appId}");
         Assert.Equal(HttpStatusCode.NoContent, removed.StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await developer.GetAsync($"/apps/{appId}")).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await developer.DeleteAsync($"/apps/{appId}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await developer.SendAsync(HttpMethod.Delete, $"/apps/{appId}")).StatusCode);
 
         await using var check = factory.Services.CreateAsyncScope();
         var history = check.ServiceProvider.GetRequiredService<DeliveryDbContext>();
@@ -213,7 +213,7 @@ public sealed class ApplicationMaintenanceApiTests
             await delivery.SaveChangesAsync();
         }
 
-        var refused = await developer.DeleteAsync($"/apps/{appId}");
+        var refused = await developer.SendAsync(HttpMethod.Delete, $"/apps/{appId}");
         Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
         Assert.Contains(DeployLease.ContendedMessage, await refused.Content.ReadAsStringAsync(), StringComparison.Ordinal);
         (await developer.GetAsync($"/apps/{appId}")).EnsureSuccessStatusCode();

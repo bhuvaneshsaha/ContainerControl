@@ -392,7 +392,8 @@ describe('Apps', () => {
     expect(request.request.body.allowDatabaseImages).toBeUndefined();
     expect(request.request.body.command).toEqual(['nginx', '-g', 'daemon off;']);
     expect(request.request.body.internalPort).toBe(80);
-    request.flush('', { status: 204, statusText: 'No Content' });
+    request.flush(null, { status: 204, statusText: 'No Content' });
+    await fixture.whenStable();
     http.expectOne(`${environment.apiUrl}/apps`).flush({
       apps: [{ ...app, name: 'welcome-renamed', hostId: 'host-2' }],
     });
@@ -496,7 +497,8 @@ describe('Apps', () => {
     await Promise.resolve();
     const request = http.expectOne(`${environment.apiUrl}/apps/${app.id}`);
     expect(request.request.method).toBe('DELETE');
-    request.flush('', { status: 204, statusText: 'No Content' });
+    request.flush(null, { status: 204, statusText: 'No Content' });
+    await fixture.whenStable();
     http.expectOne(`${environment.apiUrl}/apps`).flush({ apps: [] });
     await pending;
 

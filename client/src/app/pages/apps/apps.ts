@@ -234,9 +234,7 @@ export class Apps {
 
     await runBusy(this.busy, 'edit', async () => {
       try {
-        await firstValueFrom(
-          this.http.put(`${environment.apiUrl}/apps/${app.id}`, body, { observe: 'response', responseType: 'text' }),
-        );
+        await firstValueFrom(this.http.put(`${environment.apiUrl}/apps/${app.id}`, body));
         this.editing.set(null);
         this.feedback.success(`${body.name} was saved.`);
         try {
@@ -264,9 +262,7 @@ export class Apps {
     await runBusy(this.busy, `remove:${app.id}`, async () => {
       this.feedback.clear();
       try {
-        await firstValueFrom(
-          this.http.delete(`${environment.apiUrl}/apps/${app.id}`, { observe: 'response', responseType: 'text' }),
-        );
+        await firstValueFrom(this.http.delete(`${environment.apiUrl}/apps/${app.id}`));
       } catch (error) {
         this.feedback.error(problemMessage(error, 'The application could not be removed.'));
         return;
