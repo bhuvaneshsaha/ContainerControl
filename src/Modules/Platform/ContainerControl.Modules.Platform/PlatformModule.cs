@@ -30,6 +30,8 @@ public static class PlatformModule
                 npgsql.MigrationsAssembly(typeof(PlatformDbContext).Assembly.GetName().Name);
             }));
         services.AddSingleton<IDockerEngine, DockerEngineClient>();
+        services.AddScoped<IEngineSecretReader, UnavailableEngineSecretReader>();
+        services.AddScoped<IEngineCertificateLoader, EngineCertificateLoader>();
         services.AddScoped<HostRegistry>();
         services.AddScoped<IDockerHostLookup>(provider => provider.GetRequiredService<HostRegistry>());
         services.AddScoped<QuotaAdmin>();

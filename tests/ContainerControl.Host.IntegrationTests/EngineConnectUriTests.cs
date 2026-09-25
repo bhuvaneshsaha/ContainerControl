@@ -1,5 +1,7 @@
 using ContainerControl.Modules.Platform.Engine;
 using ContainerControl.Modules.Platform.Hosts;
+using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Hosting;
 
 namespace ContainerControl.Host.IntegrationTests;
 
@@ -100,5 +102,80 @@ public class EngineConnectUriTests
         var result = await registry.RegisterAsync("local", "  ", CancellationToken.None);
 
         Assert.Equal("Enter a host name and an Engine endpoint.", result.Error);
+    }
+
+    [Fact]
+    public async Task Connect_rejects_cleartext_tcp_outside_development()
+    {
+        var engine = new DockerEngineClient();
+        const string address = "tcp://10.9.8.7:2376";
+
+        var error = await Assert.ThrowsAsync<DockerEngineException>(() =>
+            engine.GetVersionAsync(new DockerEndpoint(address), CancellationToken.None));
+
+        Assert.Equal(EngineTls.CleartextMessage, error.Message);
+        Assert.DoesNotContain("10.9.8.7", error.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(address, error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Registration_rejects_cleartext_tcp_outside_development()
+    {
+        var registry = new HostRegistry(null!, null!, null!, null!, null!);
+
+        var result = await registry.RegisterAsync("remote", "tcp://10.9.8.7:2376", CancellationToken.None);
+
+        Assert.False(result.Ok);
+        Assert.Null(result.Id);
+        Assert.Equal(EngineTls.CleartextMessage, result.Error);
+        Assert.DoesNotContain("10.9.8.7", result.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Registration_rejects_pem_in_a_certificate_reference()
+    {
+        var registry = new HostRegistry(null!, null!, null!, null!, null!);
+        const string pem = "-----BEGIN CERTIFICATE-----\nMIIB-secret-material";
+
+        var result = await registry.RegisterAsync(
+            "remote",
+            "tcp://10.9.8.7:2376",
+            CancellationToken.None,
+            pem,
+            "file:/certs/client.key",
+            "file:/certs/ca.pem");
+
+        Assert.False(result.Ok);
+        Assert.Equal(EngineTls.MaterialMessage, result.Error);
+        Assert.DoesNotContain("MIIB-secret-material", result.Error, StringComparison.Ordinal);
+        Assert.DoesNotContain("10.9.8.7", result.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Registration_in_development_allows_cleartext_tcp_until_save()
+    {
+        var registry = new HostRegistry(
+            null!,
+            null!,
+            null!,
+            null!,
+            null!,
+            new DevelopmentHostEnvironment());
+
+        var error = await Assert.ThrowsAnyAsync<Exception>(() =>
+            registry.RegisterAsync("remote", "tcp://127.0.0.1:2375", CancellationToken.None));
+
+        Assert.DoesNotContain("127.0.0.1", error.Message, StringComparison.Ordinal);
+    }
+
+    private sealed class DevelopmentHostEnvironment : IHostEnvironment
+    {
+        public string EnvironmentName { get; set; } = Environments.Development;
+
+        public string ApplicationName { get; set; } = "ContainerControl.Tests";
+
+        public string ContentRootPath { get; set; } = Path.GetTempPath();
+
+        public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
     }
 }

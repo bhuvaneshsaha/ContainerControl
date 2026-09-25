@@ -27,6 +27,9 @@ export class Hosts {
   readonly form = new FormGroup({
     name: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
     endpoint: new FormControl('unix:///var/run/docker.sock', { nonNullable: true, validators: [Validators.required] }),
+    clientCertRef: new FormControl('', { nonNullable: true }),
+    clientKeyRef: new FormControl('', { nonNullable: true }),
+    caRef: new FormControl('', { nonNullable: true }),
   });
 
   constructor() {

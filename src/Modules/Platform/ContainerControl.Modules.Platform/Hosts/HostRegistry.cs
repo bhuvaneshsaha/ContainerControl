@@ -4,6 +4,7 @@ using ContainerControl.SharedKernel.Auditing;
 using ContainerControl.SharedKernel.CurrentUser;
 using ContainerControl.SharedKernel.Time;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
 
 namespace ContainerControl.Modules.Platform.Hosts;
 
@@ -14,19 +15,25 @@ public sealed class HostRegistry : IDockerHostLookup
     private readonly IClock _clock;
     private readonly ICurrentUser _currentUser;
     private readonly IAuditSink _audit;
+    private readonly IHostEnvironment? _environment;
+    private readonly IEngineCertificateLoader? _certificates;
 
     public HostRegistry(
         PlatformDbContext db,
         IDockerEngine engine,
         IClock clock,
         ICurrentUser currentUser,
-        IAuditSink audit)
+        IAuditSink audit,
+        IHostEnvironment? environment = null,
+        IEngineCertificateLoader? certificates = null)
     {
         _db = db;
         _engine = engine;
         _clock = clock;
         _currentUser = currentUser;
         _audit = audit;
+        _environment = environment;
+        _certificates = certificates;
     }
 
     public async Task<IReadOnlyList<DockerHost>> ListAsync(CancellationToken cancellationToken)
@@ -51,16 +58,46 @@ public sealed class HostRegistry : IDockerHostLookup
     public async Task<(bool Ok, Guid? Id, string? Error)> RegisterAsync(
         string name,
         string endpoint,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? clientCertRef = null,
+        string? clientKeyRef = null,
+        string? caRef = null)
     {
         if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(endpoint))
         {
             return (false, null, "Enter a host name and an Engine endpoint.");
         }
 
-        if (!EngineConnectUri.TryParse(endpoint, out _, out var endpointError))
+        if (!EngineConnectUri.TryParse(endpoint, out var uri, out var endpointError) || uri is null)
         {
             return (false, null, endpointError);
+        }
+
+        if (!EngineTls.TryReference(clientCertRef, out var cert, out var certError))
+        {
+            return (false, null, certError ?? EngineTls.MaterialMessage);
+        }
+
+        if (!EngineTls.TryReference(clientKeyRef, out var key, out var keyError))
+        {
+            return (false, null, keyError ?? EngineTls.MaterialMessage);
+        }
+
+        if (!EngineTls.TryReference(caRef, out var ca, out var caError))
+        {
+            return (false, null, caError ?? EngineTls.MaterialMessage);
+        }
+
+        string? storedCert = cert?.Stored;
+        string? storedKey = key?.Stored;
+        string? storedCa = ca?.Stored;
+        if (uri.Scheme.Equals("tcp", StringComparison.OrdinalIgnoreCase))
+        {
+            var ready = await RequireTcpMaterialAsync(cert, key, ca, cancellationToken);
+            if (!ready.Ok)
+            {
+                return (false, null, ready.Error);
+            }
         }
 
         var host = new DockerHost
@@ -68,12 +105,58 @@ public sealed class HostRegistry : IDockerHostLookup
             Id = Guid.NewGuid(),
             Name = name.Trim(),
             Endpoint = endpoint.Trim(),
+            ClientCertRef = storedCert,
+            ClientKeyRef = storedKey,
+            CaRef = storedCa,
             CreatedAtUtc = _clock.UtcNow
         };
         _db.Hosts.Add(host);
         await _db.SaveChangesAsync(cancellationToken);
         await _audit.WriteAsync(new AuditRecord("platform.host.registered", "docker-host", host.Id.ToString(), _currentUser.UserId), cancellationToken);
         return (true, host.Id, null);
+    }
+
+    private async Task<(bool Ok, string? Error)> RequireTcpMaterialAsync(
+        EngineTlsReference? cert,
+        EngineTlsReference? key,
+        EngineTlsReference? ca,
+        CancellationToken cancellationToken)
+    {
+        var any = cert is not null || key is not null || ca is not null;
+        var all = cert is not null && key is not null && ca is not null;
+        if (!all)
+        {
+            if (_environment?.IsDevelopment() == true && !any)
+            {
+                return (true, null);
+            }
+
+            return (false, EngineTls.CleartextMessage);
+        }
+
+        if (_certificates is null)
+        {
+            return (false, EngineTls.UnreadableMessage);
+        }
+
+        try
+        {
+            using var material = await _certificates.LoadAsync(cert!.Stored, key!.Stored, ca!.Stored, cancellationToken);
+            if (!material.Client.HasPrivateKey)
+            {
+                return (false, EngineTls.UnreadableMessage);
+            }
+        }
+        catch (DockerEngineException)
+        {
+            return (false, EngineTls.UnreadableMessage);
+        }
+        catch (Exception)
+        {
+            return (false, EngineTls.UnreadableMessage);
+        }
+
+        return (true, null);
     }
 
     public async Task<(bool Ok, string? Version, string? Error)> PingAsync(Guid id, CancellationToken cancellationToken)
@@ -92,6 +175,10 @@ public sealed class HostRegistry : IDockerHostLookup
             await _db.SaveChangesAsync(cancellationToken);
             await _audit.WriteAsync(new AuditRecord("platform.host.pinged", "docker-host", host.Id.ToString(), _currentUser.UserId), cancellationToken);
             return (true, version.Version, null);
+        }
+        catch (DockerEngineException exception) when (EngineTls.IsOperatorMessage(exception.Message))
+        {
+            return (false, null, exception.Message);
         }
         catch (Exception exception) when (exception is DockerEngineException or Docker.DotNet.DockerApiException or HttpRequestException)
         {

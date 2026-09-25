@@ -65,9 +65,12 @@ public static class EdgeEndpoints
                 }
                 catch (Exception exception) when (exception is DockerEngineException or DockerApiException or HttpRequestException or IOException)
                 {
+                    var title = exception is DockerEngineException engine && EngineTls.IsOperatorMessage(engine.Message)
+                        ? engine.Message
+                        : "The Docker host could not be prepared.";
                     return Results.Problem(
                         statusCode: StatusCodes.Status502BadGateway,
-                        title: "The Docker host could not be prepared.");
+                        title: title);
                 }
 
                 return Results.NoContent();

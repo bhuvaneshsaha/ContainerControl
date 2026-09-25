@@ -1,35 +1,53 @@
+using ContainerControl.Modules.Platform.Persistence;
 using ContainerControl.Modules.Platform.Quotas;
 using Docker.DotNet;
 using Docker.DotNet.Models;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 namespace ContainerControl.Modules.Platform.Engine;
 
 public sealed class DockerEngineClient : IDockerEngine
 {
+    private readonly bool _allowCleartextTcp;
+    private readonly IServiceScopeFactory? _scopes;
+
+    public DockerEngineClient()
+    {
+    }
+
+    [ActivatorUtilitiesConstructor]
+    public DockerEngineClient(IHostEnvironment environment, IServiceScopeFactory scopes)
+    {
+        _allowCleartextTcp = environment.IsDevelopment();
+        _scopes = scopes;
+    }
+
     public async Task<EngineVersion> GetVersionAsync(DockerEndpoint endpoint, CancellationToken cancellationToken)
     {
-        using var client = Connect(endpoint);
+        using var client = await ConnectAsync(endpoint, cancellationToken);
         var version = await client.System.GetVersionAsync(cancellationToken);
         return new EngineVersion(version.Version, version.APIVersion);
     }
 
     public async Task<HostCapacity> ReadCapacityAsync(DockerEndpoint endpoint, CancellationToken cancellationToken)
     {
-        using var client = Connect(endpoint);
+        using var client = await ConnectAsync(endpoint, cancellationToken);
         var info = await client.System.GetSystemInfoAsync(cancellationToken);
         return new HostCapacity(info.NCPU, info.MemTotal, HostCapacityText.DataSpaceBytes(info.DriverStatus));
     }
 
     public async Task<IReadOnlyList<string>> ListContainerIdsAsync(DockerEndpoint endpoint, CancellationToken cancellationToken)
     {
-        using var client = Connect(endpoint);
+        using var client = await ConnectAsync(endpoint, cancellationToken);
         var containers = await client.Containers.ListContainersAsync(new ContainersListParameters { All = true }, cancellationToken);
         return containers.Select(container => container.ID).ToArray();
     }
 
     public async Task EnsureNetworkAsync(DockerEndpoint endpoint, string name, CancellationToken cancellationToken)
     {
-        using var client = Connect(endpoint);
+        using var client = await ConnectAsync(endpoint, cancellationToken);
         var existing = await client.Networks.ListNetworksAsync(new NetworksListParameters
         {
             Filters = new Dictionary<string, IDictionary<string, bool>>
@@ -61,7 +79,7 @@ public sealed class DockerEngineClient : IDockerEngine
 
     public async Task RemoveNetworkAsync(DockerEndpoint endpoint, string name, CancellationToken cancellationToken)
     {
-        using var client = Connect(endpoint);
+        using var client = await ConnectAsync(endpoint, cancellationToken);
         try
         {
             await client.Networks.DeleteNetworkAsync(name, cancellationToken);
@@ -74,7 +92,7 @@ public sealed class DockerEngineClient : IDockerEngine
     public async Task PullImageAsync(DockerEndpoint endpoint, string image, ImagePullAuth? auth, CancellationToken cancellationToken)
     {
         var (fromImage, tag) = SplitImage(image);
-        using var client = Connect(endpoint);
+        using var client = await ConnectAsync(endpoint, cancellationToken);
         await client.Images.CreateImageAsync(
             new ImagesCreateParameters { FromImage = fromImage, Tag = tag },
             auth is null
@@ -86,7 +104,7 @@ public sealed class DockerEngineClient : IDockerEngine
 
     public async Task<string> CreateContainerAsync(DockerEndpoint endpoint, ContainerPlan plan, CancellationToken cancellationToken)
     {
-        using var client = Connect(endpoint);
+        using var client = await ConnectAsync(endpoint, cancellationToken);
         var labels = new Dictionary<string, string>(plan.Labels, StringComparer.Ordinal);
         var response = await client.Containers.CreateContainerAsync(new CreateContainerParameters
         {
@@ -135,7 +153,7 @@ public sealed class DockerEngineClient : IDockerEngine
         Stream archive,
         CancellationToken cancellationToken)
     {
-        using var client = Connect(endpoint);
+        using var client = await ConnectAsync(endpoint, cancellationToken);
         await client.Containers.ExtractArchiveToContainerAsync(
             containerId,
             new ContainerPathStatParameters { Path = destinationPath },
@@ -145,19 +163,19 @@ public sealed class DockerEngineClient : IDockerEngine
 
     public async Task StartContainerAsync(DockerEndpoint endpoint, string containerId, CancellationToken cancellationToken)
     {
-        using var client = Connect(endpoint);
+        using var client = await ConnectAsync(endpoint, cancellationToken);
         await client.Containers.StartContainerAsync(containerId, new ContainerStartParameters(), cancellationToken);
     }
 
     public async Task StopContainerAsync(DockerEndpoint endpoint, string containerId, CancellationToken cancellationToken)
     {
-        using var client = Connect(endpoint);
+        using var client = await ConnectAsync(endpoint, cancellationToken);
         await client.Containers.StopContainerAsync(containerId, new ContainerStopParameters { WaitBeforeKillSeconds = 5 }, cancellationToken);
     }
 
     public async Task RemoveContainerAsync(DockerEndpoint endpoint, string containerId, CancellationToken cancellationToken)
     {
-        using var client = Connect(endpoint);
+        using var client = await ConnectAsync(endpoint, cancellationToken);
         await client.Containers.RemoveContainerAsync(containerId, new ContainerRemoveParameters { Force = true }, cancellationToken);
     }
 
@@ -166,7 +184,7 @@ public sealed class DockerEngineClient : IDockerEngine
         string label,
         CancellationToken cancellationToken)
     {
-        using var client = Connect(endpoint);
+        using var client = await ConnectAsync(endpoint, cancellationToken);
         var containers = await client.Containers.ListContainersAsync(new ContainersListParameters
         {
             All = true,
@@ -189,7 +207,7 @@ public sealed class DockerEngineClient : IDockerEngine
         IReadOnlyList<string> command,
         CancellationToken cancellationToken)
     {
-        using var client = Connect(endpoint);
+        using var client = await ConnectAsync(endpoint, cancellationToken);
         var created = await client.Exec.CreateContainerExecAsync(containerId, new ContainerExecCreateParameters
         {
             AttachStdout = true,
@@ -225,7 +243,7 @@ public sealed class DockerEngineClient : IDockerEngine
         int tail,
         CancellationToken cancellationToken)
     {
-        using var client = Connect(endpoint);
+        using var client = await ConnectAsync(endpoint, cancellationToken);
         using var stream = await client.Containers.GetContainerLogsAsync(containerId, new ContainerLogsParameters
         {
             ShowStdout = true,
@@ -243,7 +261,7 @@ public sealed class DockerEngineClient : IDockerEngine
         IProgress<string> progress,
         CancellationToken cancellationToken)
     {
-        using var client = Connect(endpoint);
+        using var client = await ConnectAsync(endpoint, cancellationToken);
         await client.Containers.GetContainerLogsAsync(
             containerId,
             new ContainerLogsParameters
@@ -262,7 +280,7 @@ public sealed class DockerEngineClient : IDockerEngine
         string containerId,
         CancellationToken cancellationToken)
     {
-        using var client = Connect(endpoint);
+        using var client = await ConnectAsync(endpoint, cancellationToken);
         using var stream = await client.Containers.GetContainerStatsAsync(
             containerId,
             new ContainerStatsParameters { Stream = false },
@@ -326,7 +344,7 @@ public sealed class DockerEngineClient : IDockerEngine
         string name,
         CancellationToken cancellationToken)
     {
-        using var client = Connect(endpoint);
+        using var client = await ConnectAsync(endpoint, cancellationToken);
         var containers = await client.Containers.ListContainersAsync(new ContainersListParameters
         {
             All = true,
@@ -343,7 +361,7 @@ public sealed class DockerEngineClient : IDockerEngine
         string containerId,
         CancellationToken cancellationToken)
     {
-        using var client = Connect(endpoint);
+        using var client = await ConnectAsync(endpoint, cancellationToken);
         var inspect = await client.Containers.InspectContainerAsync(containerId, cancellationToken);
         return inspect.State?.Health?.Status;
     }
@@ -365,11 +383,67 @@ public sealed class DockerEngineClient : IDockerEngine
         };
     }
 
-    private static DockerClient Connect(DockerEndpoint endpoint)
+    private async Task<DockerClient> ConnectAsync(DockerEndpoint endpoint, CancellationToken cancellationToken)
     {
         var uri = EngineConnectUri.Parse(endpoint.Address);
-        return new DockerClientConfiguration(uri).CreateClient(new System.Version(1, 44), null!);
+        if (!uri.Scheme.Equals("tcp", StringComparison.OrdinalIgnoreCase))
+        {
+            return Client(uri, null);
+        }
+
+        var material = await ReadTcpMaterialAsync(endpoint.Address.Trim(), cancellationToken);
+        if (material is null)
+        {
+            return Client(uri, null);
+        }
+
+        return Client(uri, new EngineClientCredentials(material));
     }
+
+    private async Task<EngineCertificateMaterial?> ReadTcpMaterialAsync(string address, CancellationToken cancellationToken)
+    {
+        if (_scopes is null)
+        {
+            if (_allowCleartextTcp)
+            {
+                return null;
+            }
+
+            throw new DockerEngineException(EngineTls.CleartextMessage);
+        }
+
+        using var scope = _scopes.CreateScope();
+        var hosts = await scope.ServiceProvider.GetRequiredService<PlatformDbContext>().Hosts
+            .AsNoTracking()
+            .Where(host => host.Endpoint == address)
+            .ToListAsync(cancellationToken);
+        if (hosts.Count > 1)
+        {
+            throw new DockerEngineException(EngineTls.UnreadableMessage);
+        }
+
+        var host = hosts.SingleOrDefault();
+        var cert = host?.ClientCertRef;
+        var key = host?.ClientKeyRef;
+        var ca = host?.CaRef;
+        var any = !string.IsNullOrWhiteSpace(cert) || !string.IsNullOrWhiteSpace(key) || !string.IsNullOrWhiteSpace(ca);
+        var all = !string.IsNullOrWhiteSpace(cert) && !string.IsNullOrWhiteSpace(key) && !string.IsNullOrWhiteSpace(ca);
+        if (!all)
+        {
+            if (_allowCleartextTcp && !any)
+            {
+                return null;
+            }
+
+            throw new DockerEngineException(EngineTls.CleartextMessage);
+        }
+
+        return await scope.ServiceProvider.GetRequiredService<IEngineCertificateLoader>()
+            .LoadAsync(cert!, key!, ca!, cancellationToken);
+    }
+
+    private static DockerClient Client(Uri uri, Credentials? credentials) =>
+        new DockerClientConfiguration(uri, credentials).CreateClient(new System.Version(1, 44), null!);
 
     private static string? AppSubnet(string name)
     {

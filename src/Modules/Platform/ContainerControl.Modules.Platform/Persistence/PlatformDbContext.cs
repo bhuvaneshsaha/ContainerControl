@@ -36,6 +36,9 @@ public sealed class PlatformDbContext : DbContext
             entity.HasKey(host => host.Id);
             entity.Property(host => host.Name).HasMaxLength(200).IsRequired();
             entity.Property(host => host.Endpoint).HasMaxLength(500).IsRequired();
+            entity.Property(host => host.ClientCertRef).HasMaxLength(500);
+            entity.Property(host => host.ClientKeyRef).HasMaxLength(500);
+            entity.Property(host => host.CaRef).HasMaxLength(500);
             entity.Property(host => host.EngineVersion).HasMaxLength(64);
             entity.HasIndex(host => host.Name).IsUnique();
             entity.Property<uint>("xmin").HasColumnType("xid").ValueGeneratedOnAddOrUpdate().IsConcurrencyToken();

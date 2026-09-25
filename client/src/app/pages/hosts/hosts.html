@@ -4,6 +4,13 @@
   <input id="host-name" formControlName="name" />
   <label for="host-endpoint">Engine endpoint</label>
   <input id="host-endpoint" formControlName="endpoint" />
+  <label for="host-client-cert">Client certificate reference</label>
+  <input id="host-client-cert" formControlName="clientCertRef" />
+  <label for="host-client-key">Client key reference</label>
+  <input id="host-client-key" formControlName="clientKeyRef" />
+  <label for="host-ca">CA reference</label>
+  <input id="host-ca" formControlName="caRef" />
+  <p>For a tcp endpoint outside Development, use <code>file:/absolute/path</code> or <code>infisical:prod:/engine/client-cert</code> for the certificate, key, and CA. Do not paste PEM.</p>
   <button type="submit" [disabled]="busy() !== null">{{ busy() === 'register' ? 'Registering…' : 'Register host' }}</button>
 </form>
 @if (status() === 'loading') {

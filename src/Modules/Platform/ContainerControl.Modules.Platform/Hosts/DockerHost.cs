@@ -8,6 +8,12 @@ public sealed class DockerHost
 
     public string Endpoint { get; set; } = string.Empty;
 
+    public string? ClientCertRef { get; set; }
+
+    public string? ClientKeyRef { get; set; }
+
+    public string? CaRef { get; set; }
+
     public string? EngineVersion { get; set; }
 
     public DateTimeOffset? LastPingAtUtc { get; set; }

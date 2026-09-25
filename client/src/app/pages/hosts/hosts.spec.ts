@@ -24,4 +24,11 @@ describe('Hosts', () => {
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('No Docker hosts are registered yet.');
   });
+
+  it('posts certificate references with the host', () => {
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+    expect(element.querySelector('#host-client-cert')).not.toBeNull();
+    expect(element.textContent).toContain('Do not paste PEM.');
+  });
 });

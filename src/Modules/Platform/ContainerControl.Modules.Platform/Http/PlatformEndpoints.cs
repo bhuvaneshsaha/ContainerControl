@@ -7,11 +7,24 @@ using Microsoft.AspNetCore.Routing;
 
 namespace ContainerControl.Modules.Platform.Http;
 
-public sealed record HostSummary(Guid Id, string Name, string Endpoint, string? EngineVersion, DateTimeOffset? LastPingAtUtc);
+public sealed record HostSummary(
+    Guid Id,
+    string Name,
+    string Endpoint,
+    string? EngineVersion,
+    DateTimeOffset? LastPingAtUtc,
+    string? ClientCertRef = null,
+    string? ClientKeyRef = null,
+    string? CaRef = null);
 
 public sealed record HostListResponse(IReadOnlyList<HostSummary> Hosts);
 
-public sealed record RegisterHostRequest(string? Name, string? Endpoint);
+public sealed record RegisterHostRequest(
+    string? Name,
+    string? Endpoint,
+    string? ClientCertRef,
+    string? ClientKeyRef,
+    string? CaRef);
 
 public sealed record RegisterHostResponse(Guid Id);
 
@@ -65,7 +78,13 @@ public static class PlatformEndpoints
                 HostRegistry hosts,
                 CancellationToken cancellationToken) =>
             {
-                var result = await hosts.RegisterAsync(request?.Name ?? string.Empty, request?.Endpoint ?? string.Empty, cancellationToken);
+                var result = await hosts.RegisterAsync(
+                    request?.Name ?? string.Empty,
+                    request?.Endpoint ?? string.Empty,
+                    cancellationToken,
+                    request?.ClientCertRef,
+                    request?.ClientKeyRef,
+                    request?.CaRef);
                 if (!result.Ok || result.Id is null)
                 {
                     return Results.ValidationProblem(new Dictionary<string, string[]>
@@ -183,5 +202,5 @@ public static class PlatformEndpoints
     }
 
     private static HostSummary ToSummary(DockerHost host) =>
-        new(host.Id, host.Name, host.Endpoint, host.EngineVersion, host.LastPingAtUtc);
+        new(host.Id, host.Name, host.Endpoint, host.EngineVersion, host.LastPingAtUtc, host.ClientCertRef, host.ClientKeyRef, host.CaRef);
 }

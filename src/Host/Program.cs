@@ -44,6 +44,7 @@ builder.Services.AddAccessModule(builder.Configuration, secureCookies);
 builder.Services.AddPlatformModule(builder.Configuration);
 builder.Services.AddRegistriesModule(builder.Configuration);
 builder.Services.AddApplicationsModule(builder.Configuration);
+builder.Services.AddScoped<ContainerControl.Modules.Platform.Engine.IEngineSecretReader, InfisicalEngineSecretReader>();
 builder.Services.AddDeliveryModule(builder.Configuration);
 builder.Services.AddEdgeModule(builder.Configuration);
 builder.Services.AddRuntimeModule(builder.Configuration);
