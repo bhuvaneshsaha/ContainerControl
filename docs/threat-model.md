@@ -39,7 +39,7 @@ These rules are accepted in [ADR 0016](adr/0016-traefik-websecure-engine-mtls-an
 - Engine `tcp://`. Outside Development, registration and connect require the client certificate, client key, and CA from Infisical or from path references on the host row. PostgreSQL stores those references and does not store PEM. Cleartext `tcp://` is rejected with a fixed message that does not include the address. `unix` and `npipe` stay on the local trust boundary. Development may register cleartext `tcp://` for a nested or demo Engine. v1 has no separate lab insecure flag.
 - Traefik socket. Traefik v1 keeps the Docker provider and the host socket mounted read-only, as in [ADR 0004](adr/0004-one-public-ip-traefik-labels.md). The tenant compose Docker socket denylist stays enforced. A socket proxy and a Traefik file provider are deferred and are not a v1 control. That deferral does not reopen PLAT-04.
 
-The `websecure` TLS stamp and the `tcp://` certificate check are the next API change. This note records them as accepted mitigations. The current build does not enforce them yet. The tenant socket denylist is already enforced.
+The `websecure` labels and the HTTP redirect are enforced when `EDGE_ACME_EMAIL` is set. Prepare adds that redirect only when it creates Traefik. An existing `cc-traefik` container is left as it is. The `tcp://` certificate check is not enforced yet. The read-only Traefik socket mount and the tenant socket denylist are already in place.
 
 Accepted residual: Traefik holding the host Docker socket is a high-value v1 risk. It stands until a socket proxy or the file provider lands. It is accepted in [ADR 0016](adr/0016-traefik-websecure-engine-mtls-and-socket.md) and is not a reason to reopen PLAT-04.
 
