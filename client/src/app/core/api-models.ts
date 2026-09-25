@@ -13,6 +13,9 @@ export interface HostSummary {
   endpoint?: string;
   engineVersion?: string | null;
   lastPingAtUtc?: string | null;
+  clientCertRef?: string | null;
+  clientKeyRef?: string | null;
+  caRef?: string | null;
 }
 
 export interface HostListResponse {

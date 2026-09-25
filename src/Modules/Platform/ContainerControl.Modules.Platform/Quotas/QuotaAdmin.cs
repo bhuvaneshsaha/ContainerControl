@@ -106,6 +106,10 @@ public sealed class QuotaAdmin : ITeamQuotaLookup
             await _audit.WriteAsync(new AuditRecord("platform.capacity.recorded", "docker-host", hostId.ToString(), _currentUser.UserId), cancellationToken);
             return (true, null);
         }
+        catch (DockerEngineException exception) when (EngineTls.IsOperatorMessage(exception.Message))
+        {
+            return (false, exception.Message);
+        }
         catch (Exception exception) when (exception is DockerEngineException or Docker.DotNet.DockerApiException or HttpRequestException or IOException)
         {
             return (false, "The Docker host could not be read.");
