@@ -7,3 +7,5 @@ npm start
 ```
 
 The development server calls the API at `http://localhost:5080` with cookies. There is no service worker.
+
+The reusable-component catalog is [Storybook](STORYBOOK.md): `npm run storybook` (http://localhost:6006).
