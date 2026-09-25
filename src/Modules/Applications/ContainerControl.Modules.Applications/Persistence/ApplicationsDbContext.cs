@@ -18,6 +18,8 @@ public sealed class ApplicationsDbContext : DbContext
 
     public DbSet<SecretReference> Secrets => Set<SecretReference>();
 
+    public DbSet<SecretServiceTarget> SecretServiceTargets => Set<SecretServiceTarget>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasDefaultSchema(ApplicationsModule.SchemaName);
@@ -49,6 +51,16 @@ public sealed class ApplicationsDbContext : DbContext
             entity.Property(secret => secret.Path).HasMaxLength(500).IsRequired();
             entity.Property(secret => secret.InjectionMode).HasMaxLength(16).IsRequired();
             entity.HasIndex(secret => new { secret.TeamId, secret.Environment, secret.Name }).IsUnique();
+            entity.HasMany(secret => secret.Targets)
+                .WithOne()
+                .HasForeignKey(target => target.SecretId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<SecretServiceTarget>(entity =>
+        {
+            entity.ToTable("secret_service_targets");
+            entity.HasKey(target => new { target.SecretId, target.ServiceName });
+            entity.Property(target => target.ServiceName).HasMaxLength(63).IsRequired();
         });
     }
 }

@@ -13,6 +13,7 @@ import { appendLogLine, startLogTail } from '../../core/log-tail';
 import { PermissionService } from '../../core/permissions';
 import { problemMessage } from '../../core/problem-message';
 import { HasPermission } from '../../shared/has-permission';
+import { composeServiceNames, secretTargetsForSave } from './compose-services';
 
 type AppAction = 'deploy' | 'approve' | 'start' | 'stop' | 'restart' | 'rollback';
 
@@ -36,10 +37,12 @@ export class Apps {
   readonly hosts = signal<{ id: string; name: string }[]>([]);
   readonly selected = signal<AppResponse | null>(null);
   readonly secrets = signal<readonly SecretResponse[]>([]);
+  readonly serviceChoices = signal<readonly string[]>([]);
   readonly secretForm = new FormGroup({
     name: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
     injectionMode: new FormControl('env', { nonNullable: true, validators: [Validators.required] }),
     value: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
+    serviceNames: new FormControl<string[]>([], { nonNullable: true }),
   });
   readonly form = new FormGroup({
     name: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
@@ -120,8 +123,30 @@ export class Apps {
     });
   }
 
+  serviceSelected(name: string): boolean {
+    return this.secretForm.controls.serviceNames.value.includes(name);
+  }
+
+  toggleService(name: string, checked: boolean): void {
+    const next = new Set(this.secretForm.controls.serviceNames.value);
+    if (checked) {
+      next.add(name);
+    } else {
+      next.delete(name);
+    }
+
+    this.secretForm.controls.serviceNames.setValue([...next]);
+  }
+
+  serviceTargetLabel(secret: SecretResponse): string {
+    return secret.serviceNames.length > 0 ? secret.serviceNames.join(', ') : '(none)';
+  }
+
   async openSecrets(app: AppResponse, keepNotice = false): Promise<void> {
     this.selected.set(app);
+    const choices = composeServiceNames(app.composeYaml, app.image);
+    this.serviceChoices.set(choices);
+    this.secretForm.controls.serviceNames.setValue(choices.length === 1 ? [...choices] : []);
     if (!keepNotice) {
       this.feedback.clear();
     }
@@ -153,6 +178,13 @@ export class Apps {
     }
 
     const value = this.secretForm.getRawValue();
+    const existing = this.secrets().find((secret) => secret.name === value.name.trim());
+    const serviceNames = secretTargetsForSave(value.serviceNames, this.serviceChoices(), existing?.serviceNames);
+    if (serviceNames.length === 0) {
+      this.feedback.error('Select at least one service for this secret.');
+      return;
+    }
+
     await runBusy(this.busy, 'secret', async () => {
       try {
         await firstValueFrom(
@@ -164,6 +196,7 @@ export class Apps {
               name: value.name.trim(),
               injectionMode: value.injectionMode,
               value: value.value,
+              serviceNames,
             },
             { observe: 'response', responseType: 'text' },
           ),

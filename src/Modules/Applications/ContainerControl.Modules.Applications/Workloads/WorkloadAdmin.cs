@@ -205,21 +205,15 @@ public sealed class WorkloadAdmin : IWorkloadStore, ISecretCatalog
             return [];
         }
 
-        return await _db.Secrets
-            .AsNoTracking()
-            .Where(secret => secret.TeamId == teamId && secret.Environment == environment)
-            .OrderBy(secret => secret.Name)
-            .ToListAsync(cancellationToken);
+        return await SecretsQuery(teamId, environment).ToListAsync(cancellationToken);
     }
 
     public async Task<IReadOnlyList<SecretSnapshot>> ListAsync(Guid teamId, string environment, CancellationToken cancellationToken)
     {
-        var secrets = await _db.Secrets
-            .AsNoTracking()
-            .Where(secret => secret.TeamId == teamId && secret.Environment == environment)
-            .OrderBy(secret => secret.Name)
-            .ToListAsync(cancellationToken);
-        return secrets.Select(secret => new SecretSnapshot(secret.Name, secret.Path, secret.InjectionMode)).ToArray();
+        var secrets = await SecretsQuery(teamId, environment).ToListAsync(cancellationToken);
+        return secrets
+            .Select(secret => new SecretSnapshot(secret.Name, secret.Path, secret.InjectionMode, secret.OrderedServiceNames()))
+            .ToArray();
     }
 
     public async Task<(bool Ok, string? Error)> SaveSecretAsync(
@@ -228,6 +222,7 @@ public sealed class WorkloadAdmin : IWorkloadStore, ISecretCatalog
         string name,
         string injectionMode,
         string value,
+        IReadOnlyList<string>? serviceNames,
         CancellationToken cancellationToken)
     {
         if (!await CanSeeAsync(teamId, cancellationToken))
@@ -243,6 +238,11 @@ public sealed class WorkloadAdmin : IWorkloadStore, ISecretCatalog
             return (false, "Enter a name, an environment, an injection mode of env or file, and a value.");
         }
 
+        if (!TryNormalizeServices(serviceNames, out var services, out var serviceError))
+        {
+            return (false, serviceError);
+        }
+
         var path = $"/teams/{teamId:N}/{name.Trim()}";
         var address = new SecretAddress(environment, path);
         try
@@ -253,9 +253,11 @@ public sealed class WorkloadAdmin : IWorkloadStore, ISecretCatalog
         {
             return (false, exception.Message);
         }
-        var existing = await _db.Secrets.SingleOrDefaultAsync(
-            secret => secret.TeamId == teamId && secret.Environment == environment && secret.Name == name.Trim(),
-            cancellationToken);
+        var existing = await _db.Secrets
+            .Include(secret => secret.Targets)
+            .SingleOrDefaultAsync(
+                secret => secret.TeamId == teamId && secret.Environment == environment && secret.Name == name.Trim(),
+                cancellationToken);
         var created = existing is null;
         if (existing is null)
         {
@@ -275,6 +277,16 @@ public sealed class WorkloadAdmin : IWorkloadStore, ISecretCatalog
         {
             existing.InjectionMode = injectionMode;
             existing.Path = path;
+        }
+
+        var desired = services.ToHashSet(StringComparer.Ordinal);
+        existing.Targets.RemoveAll(target => !desired.Contains(target.ServiceName));
+        foreach (var serviceName in services)
+        {
+            if (existing.Targets.All(target => target.ServiceName != serviceName))
+            {
+                existing.Targets.Add(new SecretServiceTarget { SecretId = existing.Id, ServiceName = serviceName });
+            }
         }
 
         await _db.SaveChangesAsync(cancellationToken);
@@ -325,6 +337,70 @@ public sealed class WorkloadAdmin : IWorkloadStore, ISecretCatalog
                 appId.ToString(),
                 _currentUser.UserId),
             cancellationToken);
+
+    private IQueryable<SecretReference> SecretsQuery(Guid teamId, string environment) =>
+        _db.Secrets
+            .AsNoTracking()
+            .Include(secret => secret.Targets)
+            .Where(secret => secret.TeamId == teamId && secret.Environment == environment)
+            .OrderBy(secret => secret.Name);
+
+    private static bool TryNormalizeServices(IReadOnlyList<string>? serviceNames, out string[] normalized, out string? error)
+    {
+        normalized = [];
+        if (serviceNames is null || serviceNames.Count == 0)
+        {
+            error = "Select at least one service for this secret.";
+            return false;
+        }
+
+        if (serviceNames.Count > 32)
+        {
+            error = "Select at most 32 services for this secret.";
+            return false;
+        }
+
+        var names = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var raw in serviceNames)
+        {
+            var serviceName = raw?.Trim() ?? string.Empty;
+            if (!IsServiceName(serviceName))
+            {
+                error = "Service names use letters, digits, dots, underscores, and hyphens.";
+                return false;
+            }
+
+            names.Add(serviceName);
+        }
+
+        normalized = names.ToArray();
+        error = null;
+        return true;
+    }
+
+    private static bool IsServiceName(string name)
+    {
+        if (name.Length is 0 or > 63)
+        {
+            return false;
+        }
+
+        if (!char.IsAsciiLetterOrDigit(name[0]))
+        {
+            return false;
+        }
+
+        for (var index = 1; index < name.Length; index++)
+        {
+            var character = name[index];
+            if (!char.IsAsciiLetterOrDigit(character) && character is not ('.' or '_' or '-'))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
 
     private async Task<bool> CanSeeAsync(Guid teamId, CancellationToken cancellationToken)
     {

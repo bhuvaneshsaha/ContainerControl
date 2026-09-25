@@ -234,6 +234,16 @@ public sealed class DeployService
         {
             await ApplyAsync(app, host.Endpoint, plan, anyExposed, publicHost, cancellationToken);
         }
+        catch (SecretAssignmentException exception)
+        {
+            _logger.LogWarning(
+                "Deployment rejected for {ApplicationId}. {Reason}",
+                app.Id,
+                exception.Message);
+            await RecordAsync(app, "rejected", exception.Message, cancellationToken);
+            await _apps.SetStatusAsync(app.Id, "rejected", cancellationToken);
+            return DeployOutcome.Fail(StatusCodes.Status400BadRequest, exception.Message);
+        }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             _logger.LogError(
@@ -253,6 +263,17 @@ public sealed class DeployService
 
     private async Task ApplyAsync(WorkloadSnapshot app, string endpointAddress, ComposePlan plan, bool anyExposed, string? publicHost, CancellationToken cancellationToken)
     {
+        var catalog = await _secretCatalog.ListAsync(app.TeamId, app.Environment, cancellationToken);
+        var assignments = catalog.Select(secret => (Name: secret.Name, Services: secret.ServiceNames)).ToArray();
+        foreach (var service in plan.Services)
+        {
+            var failure = SecretInjection.AssignmentFailure(service.Name, service.Environment, service.Command, assignments);
+            if (failure is not null)
+            {
+                throw new SecretAssignmentException(failure);
+            }
+        }
+
         var endpoint = new DockerEndpoint(endpointAddress);
         var network = "cc-app-" + app.Id.ToString("N");
         await _engine.EnsureNetworkAsync(endpoint, network, cancellationToken);
@@ -261,9 +282,12 @@ public sealed class DeployService
             await _edge.EnsureEdgeAsync(endpointAddress, cancellationToken);
         }
 
-        var secrets = await _secretCatalog.ListAsync(app.TeamId, app.Environment, cancellationToken);
+        var serviceNames = plan.Services.Select(service => service.Name).ToHashSet(StringComparer.Ordinal);
+        var targeted = catalog
+            .Where(secret => secret.ServiceNames.Any(name => serviceNames.Contains(name)))
+            .ToArray();
         var secretValues = new Dictionary<string, (string Value, string Mode)>(StringComparer.Ordinal);
-        foreach (var secret in secrets)
+        foreach (var secret in targeted)
         {
             var value = await _secretStore.ReadAsync(new SecretAddress(app.Environment, secret.Path), cancellationToken);
             if (value is null)
@@ -274,6 +298,10 @@ public sealed class DeployService
             secretValues[secret.Name] = (value, secret.InjectionMode);
         }
 
+        var scoped = targeted
+            .Select(secret => new ScopedSecret(secret.Name, secretValues[secret.Name].Value, secretValues[secret.Name].Mode, secret.ServiceNames))
+            .ToArray();
+
         var existing = await _engine.ListByLabelAsync(endpoint, "cc.application=" + app.Id, cancellationToken);
         foreach (var container in existing)
         {
@@ -281,13 +309,12 @@ public sealed class DeployService
         }
 
         var ordered = ComposePolicy.StartOrder(plan.Services);
-        var secretInputs = secretValues.Select(pair => (pair.Key, pair.Value.Value, pair.Value.Mode)).ToArray();
         foreach (var service in ordered)
         {
             var image = service.Image;
             var auth = await _registries.ForImageAsync(image, cancellationToken);
             await _engine.PullImageAsync(endpoint, image, auth, cancellationToken);
-            var injected = SecretInjection.Apply(service.Environment, service.Command, secretInputs);
+            var injected = SecretInjection.Apply(service.Environment, service.Command, SecretInjection.ForService(service.Name, scoped));
             var exposed = service.Exposed;
             var labels = new Dictionary<string, string>
             {

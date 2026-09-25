@@ -40,11 +40,23 @@ public sealed record CreateAppRequest(
     bool RequiresApproval,
     bool? AllowDatabaseImages = null);
 
-public sealed record SecretResponse(Guid Id, string Name, string Environment, string InjectionMode, string Path);
+public sealed record SecretResponse(
+    Guid Id,
+    string Name,
+    string Environment,
+    string InjectionMode,
+    string Path,
+    IReadOnlyList<string> ServiceNames);
 
 public sealed record SecretListResponse(IReadOnlyList<SecretResponse> Secrets);
 
-public sealed record SaveSecretRequest(Guid? TeamId, string? Environment, string? Name, string? InjectionMode, string? Value);
+public sealed record SaveSecretRequest(
+    Guid? TeamId,
+    string? Environment,
+    string? Name,
+    string? InjectionMode,
+    string? Value,
+    IReadOnlyList<string>? ServiceNames);
 
 public static class ApplicationEndpoints
 {
@@ -153,7 +165,7 @@ public static class ApplicationEndpoints
         endpoints.MapGet("/secrets", async (Guid teamId, string environment, WorkloadAdmin apps, CancellationToken cancellationToken) =>
             {
                 var list = await apps.ListSecretsAsync(teamId, environment, cancellationToken);
-                return Results.Ok(new SecretListResponse(list.Select(secret => new SecretResponse(secret.Id, secret.Name, secret.Environment, secret.InjectionMode, secret.Path)).ToArray()));
+                return Results.Ok(new SecretListResponse(list.Select(ToSecret).ToArray()));
             })
             .RequirePermission(PermissionCatalog.SecretsRead)
             .WithName("ListSecrets")
@@ -173,6 +185,7 @@ public static class ApplicationEndpoints
                     request?.Name ?? string.Empty,
                     request?.InjectionMode ?? string.Empty,
                     request?.Value ?? string.Empty,
+                    request?.ServiceNames,
                     cancellationToken);
                 if (!result.Ok)
                 {
@@ -219,4 +232,7 @@ public static class ApplicationEndpoints
 
     private static AppResponse ToResponse(ContainerApp app) =>
         new(app.Id, app.TeamId, app.HostId, app.Name, app.Environment, app.Image, app.ComposeYaml, app.InternalPort, app.Hostname, app.Exposed, app.RequiresApproval, app.AllowDatabaseImages, app.Status);
+
+    private static SecretResponse ToSecret(SecretReference secret) =>
+        new(secret.Id, secret.Name, secret.Environment, secret.InjectionMode, secret.Path, secret.OrderedServiceNames());
 }

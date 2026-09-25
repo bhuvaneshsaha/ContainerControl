@@ -86,6 +86,7 @@ export interface AppResponse {
   exposed: boolean;
   requiresApproval: boolean;
   allowDatabaseImages: boolean;
+  composeYaml?: string | null;
 }
 
 export interface AppListResponse {
@@ -98,6 +99,7 @@ export interface SecretResponse {
   environment: string;
   injectionMode: string;
   path: string;
+  serviceNames: string[];
 }
 
 export interface SecretListResponse {
