@@ -56,10 +56,15 @@ public static class ComposePolicy
         "enterprise", "express", "free", "standard", "personal"
     };
 
-    public static ComposePlan FromImage(string image, IReadOnlyList<string>? command, bool exposed, int? port)
+    public static ComposePlan FromImage(
+        string image,
+        IReadOnlyList<string>? command,
+        bool exposed,
+        int? port,
+        bool allowDatabaseImages = false)
     {
         var errors = new List<string>();
-        if (IsDatabaseImage(image))
+        if (!allowDatabaseImages && IsDatabaseImage(image))
         {
             errors.Add($"Image '{image}' is a database image. Use the data tier.");
         }
@@ -70,7 +75,7 @@ public static class ComposePolicy
         return new ComposePlan(errors.Count == 0, errors, services);
     }
 
-    public static ComposePlan Parse(string yaml)
+    public static ComposePlan Parse(string yaml, bool allowDatabaseImages = false)
     {
         var errors = new List<string>();
         var services = new List<PlannedService>();
@@ -120,7 +125,7 @@ public static class ComposePolicy
                 continue;
             }
 
-            if (IsDatabaseImage(image))
+            if (!allowDatabaseImages && IsDatabaseImage(image))
             {
                 errors.Add($"Service '{name}' uses database image '{image}'. Use the data tier.");
             }

@@ -21,6 +21,7 @@ public sealed record AppResponse(
     string? Hostname,
     bool Exposed,
     bool RequiresApproval,
+    bool AllowDatabaseImages,
     string Status);
 
 public sealed record AppListResponse(IReadOnlyList<AppResponse> Apps);
@@ -36,7 +37,8 @@ public sealed record CreateAppRequest(
     int? InternalPort,
     string? Hostname,
     bool Exposed,
-    bool RequiresApproval);
+    bool RequiresApproval,
+    bool? AllowDatabaseImages = null);
 
 public sealed record SecretResponse(Guid Id, string Name, string Environment, string InjectionMode, string Path);
 
@@ -68,11 +70,17 @@ public static class ApplicationEndpoints
             .WithTags("Applications")
             .Produces<AppResponse>();
 
-        endpoints.MapPost("/apps", async (CreateAppRequest? request, WorkloadAdmin apps, CancellationToken cancellationToken) =>
+        endpoints.MapPost("/apps", async (CreateAppRequest? request, ClaimsPrincipal principal, WorkloadAdmin apps, CancellationToken cancellationToken) =>
             {
                 if (request?.TeamId is null || request.HostId is null)
                 {
                     return Results.ValidationProblem(new Dictionary<string, string[]> { ["app"] = ["Enter a team and a Docker host."] });
+                }
+
+                var allowDatabaseImages = request.AllowDatabaseImages ?? false;
+                if (!DatabaseImageOverride.MayEnable(allowDatabaseImages, currentlyAllowed: false, CallerMayManageSettings(principal)))
+                {
+                    return DatabaseImagesForbidden();
                 }
 
                 var result = await apps.CreateAsync(
@@ -87,6 +95,7 @@ public static class ApplicationEndpoints
                     request.Hostname,
                     request.Exposed,
                     request.RequiresApproval,
+                    allowDatabaseImages,
                     cancellationToken);
                 if (!result.Ok || result.Id is null)
                 {
@@ -100,8 +109,20 @@ public static class ApplicationEndpoints
             .WithTags("Applications")
             .Produces(StatusCodes.Status201Created);
 
-        endpoints.MapPut("/apps/{appId:guid}", async (Guid appId, CreateAppRequest? request, WorkloadAdmin apps, CancellationToken cancellationToken) =>
+        endpoints.MapPut("/apps/{appId:guid}", async (Guid appId, CreateAppRequest? request, ClaimsPrincipal principal, WorkloadAdmin apps, CancellationToken cancellationToken) =>
             {
+                var existing = await apps.FindEntityAsync(appId, cancellationToken);
+                if (existing is null)
+                {
+                    return Results.NotFound();
+                }
+
+                var allowDatabaseImages = request?.AllowDatabaseImages ?? existing.AllowDatabaseImages;
+                if (!DatabaseImageOverride.MayEnable(allowDatabaseImages, existing.AllowDatabaseImages, CallerMayManageSettings(principal)))
+                {
+                    return DatabaseImagesForbidden();
+                }
+
                 var result = await apps.UpdateAsync(
                     appId,
                     request?.Image,
@@ -111,6 +132,7 @@ public static class ApplicationEndpoints
                     request?.Hostname,
                     request?.Exposed ?? false,
                     request?.RequiresApproval ?? false,
+                    allowDatabaseImages,
                     cancellationToken);
                 if (result.Error == "not-found")
                 {
@@ -187,6 +209,14 @@ public static class ApplicationEndpoints
         return endpoints;
     }
 
+    private static bool CallerMayManageSettings(ClaimsPrincipal principal) =>
+        principal.HasClaim(PermissionPolicy.ClaimType, PermissionCatalog.PlatformSettingsManage);
+
+    private static IResult DatabaseImagesForbidden() =>
+        Results.Json(
+            new { title = "Allowing database images needs Manage platform settings." },
+            statusCode: StatusCodes.Status403Forbidden);
+
     private static AppResponse ToResponse(ContainerApp app) =>
-        new(app.Id, app.TeamId, app.HostId, app.Name, app.Environment, app.Image, app.ComposeYaml, app.InternalPort, app.Hostname, app.Exposed, app.RequiresApproval, app.Status);
+        new(app.Id, app.TeamId, app.HostId, app.Name, app.Environment, app.Image, app.ComposeYaml, app.InternalPort, app.Hostname, app.Exposed, app.RequiresApproval, app.AllowDatabaseImages, app.Status);
 }

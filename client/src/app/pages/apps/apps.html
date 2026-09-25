@@ -31,6 +31,10 @@
   <label for="app-exposed"><input id="app-exposed" type="checkbox" formControlName="exposed" /> Exposed</label>
   <label for="app-approval"><input id="app-approval" type="checkbox" formControlName="requireApproval" /> Require approval</label>
   <p>Production stays pending until someone with deploy approval accepts it.</p>
+  <div *appHasPermission="'platform.settings.manage'">
+    <label for="app-database"><input id="app-database" type="checkbox" formControlName="allowDatabaseImages" /> Allow database images</label>
+    <p>Off by default. Enabling this lets the application run database containers on the app host. That is an exception to the data tier.</p>
+  </div>
   <button type="submit" [disabled]="busy() !== null">{{ busy() === 'create' ? 'Saving…' : 'Save application' }}</button>
 </form>
 @if (status() === 'loading') {
@@ -44,6 +48,9 @@
     @for (app of apps(); track app.id) {
       <li>
         {{ app.name }} ({{ app.environment }}) {{ app.status }}
+        @if (app.allowDatabaseImages) {
+          <span>Database images allowed</span>
+        }
         <button type="button" *appHasPermission="'deploy.execute'" [disabled]="busy() !== null" (click)="act(app, 'deploy')">
           {{ busy() === actionKey(app, 'deploy') ? 'Deploying…' : 'Deploy' }}
         </button>

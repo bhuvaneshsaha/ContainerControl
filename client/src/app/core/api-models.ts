@@ -85,6 +85,7 @@ export interface AppResponse {
   hostname: string | null;
   exposed: boolean;
   requiresApproval: boolean;
+  allowDatabaseImages: boolean;
 }
 
 export interface AppListResponse {

@@ -167,6 +167,51 @@ public class ComposeDatabaseImagePolicyTests
         Assert.DoesNotContain(plan.Errors, error => error.Contains("redis", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Fact]
+    public void Default_deny_still_rejects_a_database_image_when_the_override_is_off()
+    {
+        var single = ComposePolicy.FromImage("bitnami/postgresql:16", null, false, null, allowDatabaseImages: false);
+        Assert.False(single.Accepted);
+        Assert.Contains("Image 'bitnami/postgresql:16' is a database image. Use the data tier.", single.Errors);
+
+        var compose = ComposePolicy.Parse(ServiceYaml("db", "bitnami/postgresql:16"), allowDatabaseImages: false);
+        Assert.False(compose.Accepted);
+        Assert.Contains("Service 'db' uses database image 'bitnami/postgresql:16'. Use the data tier.", compose.Errors);
+    }
+
+    [Fact]
+    public void Per_app_allow_accepts_a_database_image_and_still_rejects_host_networking()
+    {
+        var single = ComposePolicy.FromImage("bitnami/postgresql:16", null, false, null, allowDatabaseImages: true);
+        Assert.True(single.Accepted);
+        Assert.Equal("bitnami/postgresql:16", Assert.Single(single.Services).Image);
+
+        var compose = ComposePolicy.Parse(
+            """
+            services:
+              db:
+                image: bitnami/postgresql:16
+              cache:
+                image: redis:7-alpine
+            """,
+            allowDatabaseImages: true);
+        Assert.True(compose.Accepted);
+        Assert.Equal(["db", "cache"], compose.Services.Select(service => service.Name).ToArray());
+
+        var hostNetwork = ComposePolicy.Parse(
+            """
+            services:
+              db:
+                image: bitnami/postgresql:16
+                network_mode: host
+            """,
+            allowDatabaseImages: true);
+        Assert.False(hostNetwork.Accepted);
+        Assert.Empty(hostNetwork.Services);
+        Assert.Contains("Service 'db' sets network_mode: host, which is not allowed.", hostNetwork.Errors);
+        Assert.DoesNotContain(hostNetwork.Errors, error => error.Contains("database image", StringComparison.Ordinal));
+    }
+
     private static string ServiceYaml(string name, string image) =>
         $"services:\n  {name}:\n    image: \"{image}\"\n";
 }
