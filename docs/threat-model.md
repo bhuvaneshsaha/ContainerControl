@@ -23,6 +23,8 @@ The API reaches Docker through the Engine API client. Host choice responses omit
 
 Compose is checked before any Engine call. The policy rejects `privileged`, host networking, host pid or ipc, `cap_add`, devices, `build`, bind mounts, the Docker socket, and database images. Deploy starts dependencies first and waits for a compose healthcheck, capped at five minutes. When the team has a quota, each service must declare CPU, memory, and storage limits, and the sum must fit.
 
+A deploy lease is one row per application and environment. A second deploy of that pair returns 409 Conflict instead of changing the same containers at the same time. The row expires after five minutes, so a holder that stops without releasing it does not block that pair longer than that. See [ADR 0012](adr/0012-deploy-lease-per-application-environment.md).
+
 Application hostnames and allowed domains are stored only as DNS names. A pasted URL is reduced to its host. Backticks, parentheses, and other Traefik rule characters are rejected on save and again when the `Host()` label is built, so a name cannot add a second matcher.
 
 Secret and registry values are written to Infisical. A failed deploy is stored as a short message. Messages that look like an assignment are replaced with a generic sentence. ECR refresh logs the exception type and the registry id.

@@ -7,7 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace ContainerControl.Modules.Delivery;
 
 /// <summary>
-/// Compose policy, deploy, rollback, and the worker lease.
+/// Compose policy, deploy, rollback, and the per-application environment lease.
 /// </summary>
 public static class DeliveryModule
 {
@@ -27,6 +27,7 @@ public static class DeliveryModule
                 npgsql.MigrationsHistoryTable("__EFMigrationsHistory", SchemaName);
                 npgsql.MigrationsAssembly(typeof(DeliveryDbContext).Assembly.GetName().Name);
             }));
+        services.AddScoped<DeployLease>();
         services.AddScoped<DeployService>();
         return services;
     }

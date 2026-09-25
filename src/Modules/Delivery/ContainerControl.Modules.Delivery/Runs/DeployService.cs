@@ -32,6 +32,7 @@ public sealed class DeployService
     private readonly ITeamDirectory _teams;
     private readonly ICurrentUser _currentUser;
     private readonly IClock _clock;
+    private readonly DeployLease _lease;
     private readonly ILogger<DeployService> _logger;
 
     public DeployService(
@@ -47,6 +48,7 @@ public sealed class DeployService
         ITeamDirectory teams,
         ICurrentUser currentUser,
         IClock clock,
+        DeployLease lease,
         ILogger<DeployService> logger)
     {
         _db = db;
@@ -61,6 +63,7 @@ public sealed class DeployService
         _teams = teams;
         _currentUser = currentUser;
         _clock = clock;
+        _lease = lease;
         _logger = logger;
     }
 
@@ -71,21 +74,21 @@ public sealed class DeployService
         CancellationToken cancellationToken,
         bool requireMembership = true)
     {
-        if (requireMembership)
-        {
-            if (!await MemberAsync(applicationId, actorUserId, cancellationToken))
-            {
-                return DeployOutcome.NotFound();
-            }
-        }
-        else if (await _apps.FindAsync(applicationId, cancellationToken) is null)
+        var app = await _apps.FindAsync(applicationId, cancellationToken);
+        if (app is null)
         {
             return DeployOutcome.NotFound();
         }
 
-        if (!await TryLeaseAsync(cancellationToken))
+        if (requireMembership && (actorUserId == Guid.Empty || !await _teams.IsMemberAsync(actorUserId, app.TeamId, cancellationToken)))
         {
-            return DeployOutcome.Fail(StatusCodes.Status409Conflict, "A deployment is already running.");
+            return DeployOutcome.NotFound();
+        }
+
+        var ownerId = await _lease.TryAcquireAsync(app.Id, app.Environment, cancellationToken);
+        if (ownerId is null)
+        {
+            return DeployOutcome.Fail(StatusCodes.Status409Conflict, DeployLease.ContendedMessage);
         }
 
         try
@@ -94,7 +97,7 @@ public sealed class DeployService
         }
         finally
         {
-            await ReleaseLeaseAsync(cancellationToken);
+            await ReleaseHeldAsync(app.Id, app.Environment, ownerId.Value);
         }
     }
 
@@ -405,33 +408,21 @@ public sealed class DeployService
         await _db.SaveChangesAsync(cancellationToken);
     }
 
-    private async Task<bool> TryLeaseAsync(CancellationToken cancellationToken)
+    private async Task ReleaseHeldAsync(Guid applicationId, string environment, Guid ownerId)
     {
-        var lease = await _db.Leases.SingleAsync(item => item.Id == 1, cancellationToken);
-        if (lease.ExpiresAtUtc is not null && lease.ExpiresAtUtc > _clock.UtcNow && lease.OwnerId is not null)
-        {
-            return false;
-        }
-
-        lease.OwnerId = Guid.NewGuid();
-        lease.ExpiresAtUtc = _clock.UtcNow.AddMinutes(5);
         try
         {
-            await _db.SaveChangesAsync(cancellationToken);
-            return true;
+            _db.ChangeTracker.Clear();
+            await _lease.ReleaseAsync(applicationId, environment, ownerId, CancellationToken.None);
         }
-        catch (DbUpdateConcurrencyException)
+        catch (Exception exception)
         {
-            return false;
+            _logger.LogError(
+                "Releasing the deploy lease failed for {ApplicationId} in {Environment}. {ExceptionType}",
+                applicationId,
+                environment,
+                exception.GetType().Name);
         }
-    }
-
-    private async Task ReleaseLeaseAsync(CancellationToken cancellationToken)
-    {
-        var lease = await _db.Leases.SingleAsync(item => item.Id == 1, cancellationToken);
-        lease.OwnerId = null;
-        lease.ExpiresAtUtc = null;
-        await _db.SaveChangesAsync(cancellationToken);
     }
 
     private async Task<bool> MemberAsync(Guid applicationId, Guid actorUserId, CancellationToken cancellationToken)
