@@ -10,13 +10,70 @@ public sealed record InjectedSecrets(
     IReadOnlyList<string>? Command,
     IReadOnlyList<SecretFile> Files);
 
+public sealed record ScopedSecret(string Name, string Value, string Mode, IReadOnlyList<string> Services);
+
+public sealed class SecretAssignmentException : Exception
+{
+    public SecretAssignmentException(string message)
+        : base(message)
+    {
+    }
+}
+
 /// <summary>
 /// Places configured secrets onto a service. Environment mode becomes container
 /// environment variables. File mode is packed for <c>/run/secrets</c>. Compose
-/// <c>${NAME}</c> placeholders are filled from those values.
+/// <c>${NAME}</c> placeholders are filled from those values. Callers pass only
+/// the secrets assigned to that service. An empty assignment list injects nothing.
 /// </summary>
 public static class SecretInjection
 {
+    public static IReadOnlyList<(string Name, string Value, string Mode)> ForService(
+        string serviceName,
+        IEnumerable<ScopedSecret> secrets) =>
+        secrets
+            .Where(secret => secret.Services.Contains(serviceName, StringComparer.Ordinal))
+            .Select(secret => (secret.Name, secret.Value, secret.Mode))
+            .ToArray();
+
+    public static string? AssignmentFailure(
+        string serviceName,
+        IReadOnlyDictionary<string, string> environment,
+        IReadOnlyList<string>? command,
+        IEnumerable<(string Name, IReadOnlyList<string> Services)> secrets)
+    {
+        var catalog = new HashSet<string>(StringComparer.Ordinal);
+        var assigned = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var secret in secrets)
+        {
+            catalog.Add(secret.Name);
+            if (secret.Services.Contains(serviceName, StringComparer.Ordinal))
+            {
+                assigned.Add(secret.Name);
+            }
+        }
+
+        var missing = new SortedSet<string>(StringComparer.Ordinal);
+        CollectUnassigned(environment.Values, catalog, assigned, missing);
+        if (command is not null)
+        {
+            CollectUnassigned(command, catalog, assigned, missing);
+        }
+
+        if (missing.Count == 0)
+        {
+            return null;
+        }
+
+        var listed = string.Join(", ", missing.Select(name => "'" + name + "'"));
+        if (missing.Count == 1)
+        {
+            return $"Service '{serviceName}' references secret {listed}, which is not assigned to that service.";
+        }
+
+        return $"Service '{serviceName}' references secrets {listed}, which are not assigned to that service.";
+    }
+
     public static InjectedSecrets Apply(
         IReadOnlyDictionary<string, string> environment,
         IReadOnlyList<string>? command,
@@ -129,6 +186,84 @@ public static class SecretInjection
         }
 
         return builder.ToString();
+    }
+
+    private static void CollectUnassigned(
+        IEnumerable<string> texts,
+        IReadOnlySet<string> catalog,
+        IReadOnlySet<string> assigned,
+        ISet<string> missing)
+    {
+        foreach (var text in texts)
+        {
+            foreach (var name in ReferencedNames(text))
+            {
+                if (catalog.Contains(name) && !assigned.Contains(name))
+                {
+                    missing.Add(name);
+                }
+            }
+        }
+    }
+
+    internal static IReadOnlyList<string> ReferencedNames(string input)
+    {
+        var names = new List<string>();
+        for (var index = 0; index < input.Length; index++)
+        {
+            if (input[index] != '$')
+            {
+                continue;
+            }
+
+            if (index + 1 < input.Length && input[index + 1] == '$')
+            {
+                index++;
+                continue;
+            }
+
+            if (index + 1 < input.Length && input[index + 1] == '{')
+            {
+                var end = input.IndexOf('}', index + 2);
+                if (end > index + 2)
+                {
+                    var token = input[(index + 2)..end];
+                    var name = token;
+                    var separator = token.IndexOf(':');
+                    if (separator > 0 && separator + 1 < token.Length && token[separator + 1] == '-')
+                    {
+                        name = token[..separator];
+                    }
+
+                    if (name.Length > 0)
+                    {
+                        names.Add(name);
+                    }
+
+                    index = end;
+                    continue;
+                }
+            }
+
+            var start = index + 1;
+            var cursor = start;
+            if (cursor < input.Length && (char.IsLetter(input[cursor]) || input[cursor] == '_'))
+            {
+                cursor++;
+                while (cursor < input.Length && (char.IsLetterOrDigit(input[cursor]) || input[cursor] == '_'))
+                {
+                    cursor++;
+                }
+
+                if (cursor > start)
+                {
+                    names.Add(input[start..cursor]);
+                    index = cursor - 1;
+                }
+            }
+        }
+
+        return names;
     }
 }
 

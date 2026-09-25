@@ -56,6 +56,70 @@ public sealed class SecretDeliveryTests
     }
 
     [Fact]
+    public void A_secret_is_injected_only_into_its_assigned_services()
+    {
+        const string apiValue = "api-only-value";
+        const string unusedValue = "unused-value";
+        var secrets = new[]
+        {
+            new ScopedSecret("DB_PASSWORD", apiValue, "env", ["api"]),
+            new ScopedSecret("UNUSED", unusedValue, "env", []),
+            new ScopedSecret("WORKER_TOKEN", "worker-value", "file", ["worker"])
+        };
+
+        var api = SecretInjection.ForService("api", secrets);
+        var worker = SecretInjection.ForService("worker", secrets);
+        Assert.Equal(["DB_PASSWORD"], api.Select(item => item.Name).ToArray());
+        Assert.Empty(SecretInjection.ForService("web", secrets));
+        Assert.Equal(["WORKER_TOKEN"], worker.Select(item => item.Name).ToArray());
+
+        var injected = SecretInjection.Apply(
+            new Dictionary<string, string> { ["APP_PASSWORD"] = "${DB_PASSWORD}" },
+            null,
+            worker);
+        Assert.Equal("${DB_PASSWORD}", injected.Environment["APP_PASSWORD"]);
+        Assert.DoesNotContain(apiValue, injected.Environment.Values);
+        Assert.DoesNotContain(unusedValue, injected.Environment.Values);
+        Assert.False(injected.Environment.ContainsKey("DB_PASSWORD"));
+        Assert.False(injected.Environment.ContainsKey("UNUSED"));
+    }
+
+    [Fact]
+    public void An_unassigned_secret_reference_fails_without_echoing_the_value()
+    {
+        const string echoed = "do-not-echo-this-value";
+        var environment = new Dictionary<string, string>
+        {
+            ["APP_PASSWORD"] = "${DB_PASSWORD}",
+            ["TOKEN"] = "prefix-$API_TOKEN-" + echoed,
+            ["PLAIN"] = "${NOT_A_SECRET:-ok}",
+            ["LITERAL"] = "$$DB_PASSWORD"
+        };
+        (string Name, IReadOnlyList<string> Services)[] secrets =
+        [
+            ("DB_PASSWORD", ["api"]),
+            ("API_TOKEN", []),
+            ("UNUSED", ["worker"])
+        ];
+
+        var message = SecretInjection.AssignmentFailure("worker", environment, ["run", "${DB_PASSWORD:-}"], secrets);
+        Assert.Equal(
+            "Service 'worker' references secrets 'API_TOKEN', 'DB_PASSWORD', which are not assigned to that service.",
+            message);
+        Assert.DoesNotContain(echoed, message, StringComparison.Ordinal);
+        Assert.Null(SecretInjection.AssignmentFailure(
+            "api",
+            new Dictionary<string, string> { ["APP_PASSWORD"] = "${DB_PASSWORD}", ["LITERAL"] = "$$DB_PASSWORD" },
+            null,
+            secrets));
+        Assert.Null(SecretInjection.AssignmentFailure(
+            "worker",
+            new Dictionary<string, string> { ["LITERAL"] = "$$DB_PASSWORD" },
+            null,
+            secrets));
+    }
+
+    [Fact]
     public void Secret_file_name_is_rejected_without_echoing_the_value()
     {
         const string value = "do-not-echo-this-value";

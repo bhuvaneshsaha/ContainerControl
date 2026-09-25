@@ -38,7 +38,7 @@ If the Docker host's data root is already an overlay filesystem — a nested VM,
 
 - Keep tenant containers on a private app network, with only the exposed service on the edge network.
 - Create every user explicitly.
-- Store secret values only through the ContainerControl secret form. PostgreSQL keeps the name, path, and injection mode.
+- Store secret values only through the ContainerControl secret form. PostgreSQL keeps the name, path, injection mode, and the compose services that receive the secret. After upgrading to service targets, open each secret and save it again with those services. Existing rows are injected nowhere until you do. An empty assignment does not mean every service.
 - Keep production databases on the data-tier VM.
 - Deploy, restart, and read logs from ContainerControl.
 

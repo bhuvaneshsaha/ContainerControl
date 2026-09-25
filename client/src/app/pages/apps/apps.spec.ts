@@ -214,4 +214,128 @@ describe('Apps', () => {
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Database images allowed');
   });
+
+  it('shows service targets and posts only the selected services', async () => {
+    const http = TestBed.inject(HttpTestingController);
+    const app: AppResponse = {
+      id: '97f94c8a-3d8e-49ee-9397-2a358eb9a636',
+      teamId: 'team',
+      hostId: 'host',
+      name: 'billing',
+      environment: 'dev',
+      image: null,
+      composeYaml: 'services:\n  api:\n    image: nginx:1.27\n  worker:\n    image: busybox:1.36.1\n',
+      status: 'registered',
+      hostname: null,
+      exposed: false,
+      requiresApproval: false,
+      allowDatabaseImages: false,
+    };
+
+    fixture.componentInstance.status.set('ready');
+    fixture.componentInstance.apps.set([app]);
+    const pending = fixture.componentInstance.openSecrets(app);
+    http.expectOne(`${environment.apiUrl}/secrets?teamId=team&environment=dev`).flush({
+      secrets: [
+        {
+          id: 'secret-1',
+          name: 'DB_PASSWORD',
+          environment: 'dev',
+          injectionMode: 'env',
+          path: '/teams/team/DB_PASSWORD',
+          serviceNames: ['api', 'cron'],
+        },
+      ],
+    });
+    await pending;
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('DB_PASSWORD (env) → api, cron');
+    const api = fixture.nativeElement.querySelector('#secret-service-api') as HTMLInputElement;
+    const worker = fixture.nativeElement.querySelector('#secret-service-worker') as HTMLInputElement;
+    expect(api.checked).toBe(false);
+    expect(worker.checked).toBe(false);
+
+    worker.click();
+    fixture.detectChanges();
+    fixture.componentInstance.secretForm.setValue({
+      name: 'DB_PASSWORD',
+      injectionMode: 'env',
+      value: 'stored-elsewhere',
+      serviceNames: fixture.componentInstance.secretForm.controls.serviceNames.value,
+    });
+
+    const save = fixture.componentInstance.saveSecret();
+    const request = http.expectOne(`${environment.apiUrl}/secrets`);
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body.serviceNames).toEqual(['cron', 'worker']);
+    expect(request.request.body.value).toBe('stored-elsewhere');
+    request.flush(null, { status: 204, statusText: 'No Content' });
+    await fixture.whenStable();
+    http.expectOne(`${environment.apiUrl}/secrets?teamId=team&environment=dev`).flush({ secrets: [] });
+    await save;
+  });
+
+  it('selects the only service for a single-container app', async () => {
+    const http = TestBed.inject(HttpTestingController);
+    const app: AppResponse = {
+      id: '97f94c8a-3d8e-49ee-9397-2a358eb9a636',
+      teamId: 'team',
+      hostId: 'host',
+      name: 'welcome',
+      environment: 'dev',
+      image: 'nginx:1.27',
+      composeYaml: null,
+      status: 'registered',
+      hostname: null,
+      exposed: false,
+      requiresApproval: false,
+      allowDatabaseImages: false,
+    };
+
+    fixture.componentInstance.status.set('ready');
+    fixture.componentInstance.apps.set([app]);
+    const pending = fixture.componentInstance.openSecrets(app);
+    http.expectOne(`${environment.apiUrl}/secrets?teamId=team&environment=dev`).flush({ secrets: [] });
+    await pending;
+    fixture.detectChanges();
+
+    const box = fixture.nativeElement.querySelector('#secret-service-app') as HTMLInputElement;
+    expect(box.checked).toBe(true);
+    expect(fixture.nativeElement.textContent).not.toContain('This application has no services to assign.');
+  });
+
+  it('does not save a secret when no service is selected', async () => {
+    const http = TestBed.inject(HttpTestingController);
+    const app: AppResponse = {
+      id: '97f94c8a-3d8e-49ee-9397-2a358eb9a636',
+      teamId: 'team',
+      hostId: 'host',
+      name: 'billing',
+      environment: 'dev',
+      image: null,
+      composeYaml: 'services:\n  api:\n    image: nginx:1.27\n  worker:\n    image: busybox:1.36.1\n',
+      status: 'registered',
+      hostname: null,
+      exposed: false,
+      requiresApproval: false,
+      allowDatabaseImages: false,
+    };
+
+    fixture.componentInstance.status.set('ready');
+    fixture.componentInstance.apps.set([app]);
+    const opened = fixture.componentInstance.openSecrets(app);
+    http.expectOne(`${environment.apiUrl}/secrets?teamId=team&environment=dev`).flush({ secrets: [] });
+    await opened;
+    fixture.componentInstance.secretForm.setValue({
+      name: 'DB_PASSWORD',
+      injectionMode: 'env',
+      value: 'stored-elsewhere',
+      serviceNames: [],
+    });
+
+    await fixture.componentInstance.saveSecret();
+    http.expectNone(`${environment.apiUrl}/secrets`);
+    expect(TestBed.inject(FeedbackService).items()[0].text).toBe('Select at least one service for this secret.');
+  });
 });

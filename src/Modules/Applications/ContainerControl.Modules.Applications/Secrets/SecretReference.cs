@@ -15,9 +15,24 @@ public sealed class SecretReference
     public string InjectionMode { get; set; } = "env";
 
     public DateTimeOffset CreatedAtUtc { get; set; }
+
+    public List<SecretServiceTarget> Targets { get; set; } = [];
+
+    public string[] OrderedServiceNames() =>
+        Targets.Select(target => target.ServiceName).OrderBy(name => name, StringComparer.Ordinal).ToArray();
 }
 
-public sealed record SecretSnapshot(string Name, string Path, string InjectionMode);
+/// <summary>
+/// Compose service that receives this secret. An empty collection injects the secret nowhere.
+/// </summary>
+public sealed class SecretServiceTarget
+{
+    public Guid SecretId { get; set; }
+
+    public string ServiceName { get; set; } = string.Empty;
+}
+
+public sealed record SecretSnapshot(string Name, string Path, string InjectionMode, IReadOnlyList<string> ServiceNames);
 
 public sealed record SecretAddress(string Environment, string Path);
 

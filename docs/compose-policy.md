@@ -6,7 +6,7 @@ Allowed:
 
 - `image`
 - `command`
-- `environment` for non-secret configuration. A `${SECRET}` or `$SECRET` placeholder is replaced at deploy with the secret of that name for the application's environment. The secret value is not written into the stored compose file.
+- `environment` for non-secret configuration. A `${SECRET}` or `$SECRET` placeholder is replaced at deploy only when that secret is assigned to this service. A reference to a catalog secret that is not assigned to this service rejects the deploy. The message names the service and the secret name, not the value. The secret value is not written into the stored compose file. An assignment with no services injects that secret nowhere.
 - `depends_on`, as a list or a map of service names
 - named volumes
 - `healthcheck` with `test`, `interval`, `timeout`, `retries`, and `start_period`

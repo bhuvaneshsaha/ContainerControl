@@ -91,6 +91,25 @@
         </select>
         <label for="secret-value">Value</label>
         <input id="secret-value" type="password" formControlName="value" />
+        <fieldset>
+          <legend>Services</legend>
+          @if (serviceChoices().length === 0) {
+            <p>This application has no services to assign.</p>
+          } @else {
+            @for (service of serviceChoices(); track service) {
+              <label [attr.for]="'secret-service-' + service">
+                <input
+                  [id]="'secret-service-' + service"
+                  type="checkbox"
+                  [checked]="serviceSelected(service)"
+                  #serviceBox
+                  (change)="toggleService(service, serviceBox.checked)" />
+                {{ service }}
+              </label>
+            }
+          }
+        </fieldset>
+        <p>This secret is injected only into the services selected here. Service names from other applications stay assigned.</p>
         <button type="submit" [disabled]="busy() !== null">{{ busy() === 'secret' ? 'Saving…' : 'Save secret' }}</button>
       </form>
     } @else if (secretWriteState(app) === 'prod') {
@@ -102,7 +121,7 @@
       <ul>
         @for (secret of secrets(); track secret.id) {
           <li>
-            {{ secret.name }} ({{ secret.injectionMode }})
+            {{ secret.name }} ({{ secret.injectionMode }}) → {{ serviceTargetLabel(secret) }}
             @if (secretWriteState(app) === 'form') {
               <button type="button" [disabled]="busy() !== null" (click)="deleteSecret(secret)">
                 {{ busy() === 'delete:' + secret.id ? 'Deleting…' : 'Delete' }}

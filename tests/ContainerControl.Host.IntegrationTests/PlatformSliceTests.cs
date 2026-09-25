@@ -6,6 +6,7 @@ using ContainerControl.Modules.Access.Domain.Permissions;
 using ContainerControl.Modules.Access.Domain.Teams;
 using ContainerControl.Modules.Access.Infrastructure.Persistence;
 using ContainerControl.Modules.Applications.Persistence;
+using ContainerControl.Modules.Applications.Secrets;
 using ContainerControl.Modules.Platform.Engine;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -75,13 +76,41 @@ public sealed class PlatformSliceTests
         var teamId = await AddMemberAsync(factory, user.Id);
         await client.SignInAsync(user.Email!, ApiClient.SamplePassword);
 
-        var save = await client.SendAsync(HttpMethod.Post, "/secrets", new
+        var missingTargets = await client.SendAsync(HttpMethod.Post, "/secrets", new
         {
             teamId,
             environment = "dev",
             name = "db-password",
             injectionMode = "env",
             value = secretValue
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, missingTargets.StatusCode);
+        var missingBody = await missingTargets.Content.ReadAsStringAsync();
+        Assert.Contains("at least one service", missingBody, StringComparison.Ordinal);
+        Assert.DoesNotContain(secretValue, missingBody, StringComparison.Ordinal);
+        Assert.Null(infisical.Read("dev", "db-password"));
+
+        var invalidService = await client.SendAsync(HttpMethod.Post, "/secrets", new
+        {
+            teamId,
+            environment = "dev",
+            name = "db-password",
+            injectionMode = "env",
+            value = secretValue,
+            serviceNames = new[] { "../api" }
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, invalidService.StatusCode);
+        Assert.DoesNotContain(secretValue, await invalidService.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        Assert.Null(infisical.Read("dev", "db-password"));
+
+        var save = await client.SendAsync(HttpMethod.Post, "/secrets", new
+        {
+            teamId,
+            environment = "dev",
+            name = "db-password",
+            injectionMode = "env",
+            value = secretValue,
+            serviceNames = new[] { "worker", "api" }
         });
         Assert.Equal(HttpStatusCode.NoContent, save.StatusCode);
         Assert.Equal(secretValue, infisical.Read("dev", "db-password"));
@@ -91,14 +120,63 @@ public sealed class PlatformSliceTests
         Assert.Equal(HttpStatusCode.OK, list.StatusCode);
         Assert.Contains("db-password", body, StringComparison.Ordinal);
         Assert.Contains("env", body, StringComparison.Ordinal);
+        Assert.Contains("api", body, StringComparison.Ordinal);
+        Assert.Contains("worker", body, StringComparison.Ordinal);
         Assert.DoesNotContain(secretValue, body, StringComparison.Ordinal);
 
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationsDbContext>();
-        var row = await db.Secrets.SingleAsync(secret => secret.TeamId == teamId && secret.Name == "db-password");
-        var stored = row.Name + row.Path + row.Environment + row.InjectionMode + row.Id;
+        var row = await db.Secrets.Include(secret => secret.Targets).SingleAsync(secret => secret.TeamId == teamId && secret.Name == "db-password");
+        var stored = row.Name + row.Path + row.Environment + row.InjectionMode + row.Id + string.Join(",", row.Targets.Select(target => target.ServiceName));
         Assert.DoesNotContain(secretValue, stored, StringComparison.Ordinal);
         Assert.Equal("env", row.InjectionMode);
+        Assert.Equal(["api", "worker"], row.OrderedServiceNames());
+
+        var replaced = await client.SendAsync(HttpMethod.Post, "/secrets", new
+        {
+            teamId,
+            environment = "dev",
+            name = "db-password",
+            injectionMode = "env",
+            value = secretValue,
+            serviceNames = new[] { "api" }
+        });
+        Assert.Equal(HttpStatusCode.NoContent, replaced.StatusCode);
+        db.ChangeTracker.Clear();
+        var updated = await db.Secrets.Include(secret => secret.Targets).SingleAsync(secret => secret.TeamId == teamId && secret.Name == "db-password");
+        Assert.Equal(["api"], updated.OrderedServiceNames());
+    }
+
+    [Fact]
+    public async Task A_secret_without_targets_is_listed_as_assigned_to_no_service()
+    {
+        await using var factory = new ApiFactory(_fixture.ConnectionString);
+        using var client = factory.CreateClient();
+        var user = await ApiClient.CreateUserAsync(
+            factory,
+            $"legacy-{Guid.NewGuid():N}@localhost",
+            PermissionCatalog.SecretsRead);
+        var teamId = await AddMemberAsync(factory, user.Id);
+        await client.SignInAsync(user.Email!, ApiClient.SamplePassword);
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationsDbContext>();
+        db.Secrets.Add(new SecretReference
+        {
+            Id = Guid.NewGuid(),
+            TeamId = teamId,
+            Environment = "dev",
+            Name = "legacy-token",
+            Path = $"/teams/{teamId:N}/legacy-token",
+            InjectionMode = "env",
+            CreatedAtUtc = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var list = await client.GetFromJsonAsync<SecretListBody>($"/secrets?teamId={teamId}&environment=dev");
+        var row = Assert.Single(list!.Secrets);
+        Assert.Equal("legacy-token", row.Name);
+        Assert.Empty(row.ServiceNames);
     }
 
     [Fact]
@@ -481,6 +559,10 @@ public sealed class PlatformSliceTests
         await db.SaveChangesAsync();
         return id;
     }
+
+    private sealed record SecretListBody(SecretBody[] Secrets);
+
+    private sealed record SecretBody(string Name, string[] ServiceNames);
 
     private sealed record IdBody(Guid Id);
     private sealed record VersionBody(string EngineVersion);
