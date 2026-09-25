@@ -125,6 +125,7 @@ app.MapHealthChecks("/health/ready", new HealthCheckOptions
 app.MapAccessEndpoints();
 app.MapPlatformEndpoints();
 app.MapApplicationEndpoints();
+app.MapTemplateEndpoints();
 app.MapEdgeEndpoints();
 app.MapDeliveryEndpoints();
 app.MapRuntimeEndpoints();

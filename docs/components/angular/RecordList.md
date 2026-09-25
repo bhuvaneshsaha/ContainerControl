@@ -12,7 +12,7 @@ export: app-record-list
 A bordered list of records. Each row has a title, optional meta, status, and actions, plus room under the row for an edit form or an inspect panel.
 
 ## When to use
-- Applications, secrets, users, teams, roles, hosts, registries, domains, quotas, and grants.
+- Applications, templates, secrets, users, teams, roles, hosts, registries, domains, quotas, and grants.
 
 ## When not to use
 - Tabular numbers such as host capacity or audit. Use a table with `scope="col"`.

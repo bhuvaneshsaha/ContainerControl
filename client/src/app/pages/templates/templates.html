@@ -1,0 +1,70 @@
+<div class="mb-4 flex flex-wrap items-baseline gap-3">
+  <h1 class="m-0">Templates</h1>
+  @if (status() === 'ready' && refreshing()) {
+    <p class="m-0 text-sm text-neutral-600" role="status">Refreshing…</p>
+  }
+</div>
+<p>A template is a starter application. The compose file must follow the compose policy. Secret values stay in the secret catalog, not in the template.</p>
+@if (status() === 'loading') {
+  <div aria-busy="true">
+    <app-page-state kind="loading" message="Loading templates." />
+  </div>
+} @else if (status() === 'error') {
+  <app-page-state kind="error" message="Templates could not be loaded." (retry)="load()" />
+} @else {
+  @if (refreshError()) {
+    <app-page-state kind="error" message="Templates could not be loaded." (retry)="load()" />
+  }
+  @if (templates().length === 0) {
+    <app-page-state kind="empty" message="No templates are published yet." />
+  } @else {
+    <app-record-list>
+      @for (template of templates(); track template.id) {
+        <app-record-row>
+          <span recordTitle>{{ template.name }}</span>
+          <span recordMeta>{{ template.description }}</span>
+          <div recordActions>
+            <button mat-stroked-button type="button" *appHasPermission="'apps.templates.manage'" [disabled]="isBusy('remove:' + template.id)" [attr.aria-busy]="isBusy('remove:' + template.id)" (click)="remove(template)">
+              {{ isBusy('remove:' + template.id) ? 'Removing…' : 'Remove' }}
+            </button>
+          </div>
+          <pre class="mt-3 overflow-x-auto whitespace-pre-wrap rounded border border-neutral-200 bg-neutral-50 p-3 text-sm">{{ template.composeYaml }}</pre>
+        </app-record-row>
+      }
+    </app-record-list>
+  }
+
+  <div *appHasPermission="'apps.write'">
+    <details class="mt-8 max-w-xl rounded-lg border border-neutral-300 bg-white p-4">
+      <summary class="cursor-pointer font-medium">New application from a template</summary>
+      <form class="mt-4" [formGroup]="createForm" (ngSubmit)="create()">
+        <app-select-field label="Template" inputId="template-choice" formControlName="templateId" [options]="templateOptions()" [error]="fieldError(createForm.controls.templateId, { required: 'Select a template.' })" />
+        <app-text-field label="Name" inputId="template-app-name" formControlName="name" [error]="fieldError(createForm.controls.name, { required: 'Enter a name.' })" />
+        <app-select-field label="Team" inputId="template-app-team" formControlName="teamId" [options]="teamOptions()" [error]="fieldError(createForm.controls.teamId, { required: 'Select a team.' })" />
+        <app-select-field label="Docker host" inputId="template-app-host" formControlName="hostId" [options]="hostOptions()" [error]="fieldError(createForm.controls.hostId, { required: 'Select a Docker host.' })" />
+        <app-select-field label="Environment" inputId="template-app-environment" formControlName="environment" [options]="environmentOptions" />
+        <app-text-field label="Internal port" inputId="template-app-port" inputMode="numeric" formControlName="internalPort" />
+        <app-text-field label="Hostname" inputId="template-app-hostname" formControlName="hostname" />
+        <div class="mt-3 flex flex-col gap-2">
+          <app-checkbox-field label="Exposed" inputId="template-app-exposed" formControlName="exposed" />
+          <app-checkbox-field label="Require approval" inputId="template-app-approval" formControlName="requireApproval" />
+        </div>
+        <p>The compose file comes from the template. Production stays pending until someone with deploy approval accepts it.</p>
+        <button mat-flat-button type="submit" [disabled]="isBusy('create')" [attr.aria-busy]="isBusy('create')">{{ isBusy('create') ? 'Creating…' : 'Create application' }}</button>
+      </form>
+    </details>
+  </div>
+
+  <div *appHasPermission="'apps.templates.manage'">
+    <details class="mt-8 max-w-xl rounded-lg border border-neutral-300 bg-white p-4">
+      <summary class="cursor-pointer font-medium">Publish template</summary>
+      <form class="mt-4" [formGroup]="publishForm" (ngSubmit)="publish()">
+        <app-text-field label="Name" inputId="template-name" formControlName="name" [error]="fieldError(publishForm.controls.name, { required: 'Enter a name.' })" />
+        <app-text-field label="Description" inputId="template-description" formControlName="description" [error]="fieldError(publishForm.controls.description, { required: 'Enter a short description.' })" />
+        <app-text-field label="Compose file" inputId="template-compose" [rows]="8" formControlName="composeYaml" [error]="fieldError(publishForm.controls.composeYaml, { required: 'Enter a compose file.' })" />
+        <p>Do not paste a secret value. A placeholder such as $&#123;DATABASE_PASSWORD&#125; is allowed.</p>
+        <button mat-flat-button type="submit" [disabled]="isBusy('publish')" [attr.aria-busy]="isBusy('publish')">{{ isBusy('publish') ? 'Publishing…' : 'Publish template' }}</button>
+      </form>
+    </details>
+  </div>
+}

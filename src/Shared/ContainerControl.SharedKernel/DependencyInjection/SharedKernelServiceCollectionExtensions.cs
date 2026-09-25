@@ -12,6 +12,7 @@ public static class SharedKernelServiceCollectionExtensions
         services.AddSingleton<IClock, SystemClock>();
         services.AddAuthorization();
         services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
+        services.AddSingleton<IAuthorizationHandler, AnyPermissionAuthorizationHandler>();
         services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
         return services;
     }

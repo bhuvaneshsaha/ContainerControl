@@ -23,6 +23,13 @@ const catalog: readonly PermissionLabel[] = [
   { code: 'registries.manage', displayName: 'Manage registries', module: 'Registries', description: 'Create and update registry connections.', opens: 'Registries' },
   { code: 'apps.read', displayName: 'Read applications', module: 'Applications', description: 'View applications the caller may access.', opens: 'Applications' },
   { code: 'apps.write', displayName: 'Write applications', module: 'Applications', description: 'Create and update applications.', opens: 'Applications' },
+  {
+    code: 'apps.templates.manage',
+    displayName: 'Manage application templates',
+    module: 'Applications',
+    description: 'Publish and remove application templates.',
+    opens: 'Templates',
+  },
   { code: 'secrets.read', displayName: 'Read secrets', module: 'Secrets', description: 'View secret names and injection mode.', opens: 'Applications' },
   { code: 'secrets.manage', displayName: 'Manage secrets', module: 'Secrets', description: 'Write secret values for non-production environments.', opens: 'Applications' },
   { code: 'secrets.manage.prod', displayName: 'Manage production secrets', module: 'Secrets', description: 'Write secret values for production.', opens: 'Applications' },

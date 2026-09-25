@@ -24,6 +24,10 @@ export class App {
 
   readonly signedIn = this.auth.signedIn;
 
+  canOpenTemplates(): boolean {
+    return ['apps.read', 'apps.write', 'apps.templates.manage'].some((code) => this.permissions.hasPermission(code));
+  }
+
   canOpenCapacity(): boolean {
     return this.permissions.hasPermission('platform.quotas.manage') || this.permissions.hasPermission('platform.capacity.read');
   }

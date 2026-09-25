@@ -12,6 +12,10 @@ describe('resolveHomePath', () => {
   it('falls back to my access when nothing else is permitted', () => {
     expect(resolveHomePath(() => false)).toBe('/permissions');
   });
+
+  it('opens templates when that is the only permitted page', () => {
+    expect(resolveHomePath((code) => code === 'apps.templates.manage')).toBe('/templates');
+  });
 });
 
 describe('denialMessage', () => {

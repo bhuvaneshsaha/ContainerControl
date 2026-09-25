@@ -1,6 +1,7 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 
 import { environment } from '../../../environments/environment';
 import { AppResponse } from '../../core/api-models';
@@ -15,7 +16,7 @@ describe('Apps', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [Apps],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(Apps);

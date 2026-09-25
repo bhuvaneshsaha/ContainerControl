@@ -37,6 +37,12 @@ export const routes: Routes = [
         loadComponent: () => import('./pages/apps/apps').then((module) => module.Apps),
       },
       {
+        path: 'templates',
+        title: 'Templates',
+        canActivate: [permissionGuardAny(['apps.read', 'apps.write', 'apps.templates.manage'])],
+        loadComponent: () => import('./pages/templates/templates').then((module) => module.Templates),
+      },
+      {
         path: 'access',
         title: 'Users and teams',
         canActivate: [permissionGuardAny(['access.users.manage', 'access.teams.manage', 'access.roles.manage', 'access.audit.read', 'access.breakglass.grant'])],

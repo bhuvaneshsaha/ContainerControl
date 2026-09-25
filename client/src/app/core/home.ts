@@ -9,6 +9,7 @@ export interface HomeCandidate {
 /** Same order as the primary nav, without My access. First match is the post-auth home. */
 export const homeCandidates: readonly HomeCandidate[] = [
   { path: '/apps', label: 'Applications', anyOf: ['apps.read'] },
+  { path: '/templates', label: 'Templates', anyOf: ['apps.read', 'apps.write', 'apps.templates.manage'] },
   {
     path: '/access',
     label: 'Access',

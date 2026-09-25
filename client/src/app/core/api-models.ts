@@ -98,6 +98,17 @@ export interface AppListResponse {
   apps: AppResponse[];
 }
 
+export interface TemplateResponse {
+  id: string;
+  name: string;
+  description: string;
+  composeYaml: string;
+}
+
+export interface TemplateListResponse {
+  templates: TemplateResponse[];
+}
+
 export interface SecretResponse {
   id: string;
   name: string;

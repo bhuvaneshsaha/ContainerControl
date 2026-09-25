@@ -7,6 +7,9 @@
     <nav class="flex min-w-0 flex-1 flex-wrap gap-x-3 gap-y-1" aria-label="Primary">
       <a class="rounded px-1 py-0.5 text-neutral-800 no-underline hover:underline" routerLink="/permissions" routerLinkActive="font-semibold underline underline-offset-4" ariaCurrentWhenActive="page">My access</a>
       <a class="rounded px-1 py-0.5 text-neutral-800 no-underline hover:underline" *appHasPermission="'apps.read'" routerLink="/apps" routerLinkActive="font-semibold underline underline-offset-4" ariaCurrentWhenActive="page">Applications</a>
+      @if (canOpenTemplates()) {
+        <a class="rounded px-1 py-0.5 text-neutral-800 no-underline hover:underline" routerLink="/templates" routerLinkActive="font-semibold underline underline-offset-4" ariaCurrentWhenActive="page">Templates</a>
+      }
       @if (canOpenAccess()) {
         <a class="rounded px-1 py-0.5 text-neutral-800 no-underline hover:underline" routerLink="/access" routerLinkActive="font-semibold underline underline-offset-4" ariaCurrentWhenActive="page">Access</a>
       }

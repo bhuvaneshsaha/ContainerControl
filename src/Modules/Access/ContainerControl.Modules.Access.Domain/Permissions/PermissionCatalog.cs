@@ -24,6 +24,7 @@ public static class PermissionCatalog
 
     public const string AppsRead = "apps.read";
     public const string AppsWrite = "apps.write";
+    public const string AppsTemplatesManage = "apps.templates.manage";
 
     public const string SecretsRead = "secrets.read";
     public const string SecretsManage = "secrets.manage";
@@ -60,6 +61,7 @@ public static class PermissionCatalog
 
         new(AppsRead, "Read applications", "Applications", "View applications the caller may access."),
         new(AppsWrite, "Write applications", "Applications", "Create and update applications."),
+        new(AppsTemplatesManage, "Manage application templates", "Applications", "Publish and remove application templates."),
 
         new(SecretsRead, "Read secrets", "Secrets", "View secret names and injection mode."),
         new(SecretsManage, "Manage secrets", "Secrets", "Write secret values for non-production environments."),

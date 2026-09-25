@@ -21,6 +21,7 @@ A new product capability needs a new code in `PermissionCatalog` and a check at 
 | `registries.manage` | Registries |
 | `apps.read` | Applications |
 | `apps.write` | Applications |
+| `apps.templates.manage` | Applications |
 | `secrets.read` | Secrets |
 | `secrets.manage` | Secrets |
 | `secrets.manage.prod` | Secrets |
@@ -33,7 +34,7 @@ A new product capability needs a new code in `PermissionCatalog` and a check at 
 | `runtime.stats.read` | Runtime |
 | `runtime.control` | Runtime |
 
-`GET /permissions` returns the catalog for a caller with `access.roles.manage`. `GET /me/permissions` returns the signed-in user's codes. Role create, update, and delete use `access.roles.manage`. User create, disable, and role assignment use `access.users.manage`. `apps.write` creates, updates, and removes applications. The Applications page shows Edit and Remove only for that code. `deploy.approve` accepts a deploy that is waiting. The Applications page shows Approve only for that code. `access.audit.read` calls `GET /access/audit`. `access.roles.manage` edits roles from the catalog checkboxes on the Access page. `access.breakglass.grant` calls `POST /access/break-glass`. That writes an audit row and does not open a shell or the Docker socket.
+`GET /permissions` returns the catalog for a caller with `access.roles.manage`. `GET /me/permissions` returns the signed-in user's codes. Role create, update, and delete use `access.roles.manage`. User create, disable, and role assignment use `access.users.manage`. `apps.write` creates, updates, and removes applications. The Applications page shows Edit and Remove only for that code. `apps.templates.manage` publishes and removes templates. A caller with `apps.read`, `apps.write`, or `apps.templates.manage` can open Templates and list them. `apps.write` creates an application from a template. The Development platform administrator role receives every catalog code, including `apps.templates.manage`, the next time that Development seed runs. The Development developer role does not receive it. An existing production role does not gain the code until an operator adds it. `deploy.approve` accepts a deploy that is waiting. The Applications page shows Approve only for that code. `access.audit.read` calls `GET /access/audit`. `access.roles.manage` edits roles from the catalog checkboxes on the Access page. `access.breakglass.grant` calls `POST /access/break-glass`. That writes an audit row and does not open a shell or the Docker socket.
 
 Development sample roles, created only when `ASPNETCORE_ENVIRONMENT` is `Development`:
 
