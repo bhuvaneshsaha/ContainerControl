@@ -1,5 +1,6 @@
 using ContainerControl.Modules.Platform.Engine;
 using ContainerControl.Modules.Platform.Quotas;
+using ContainerControl.SharedKernel.Hostnames;
 using YamlDotNet.Core;
 using YamlDotNet.RepresentationModel;
 
@@ -14,7 +15,8 @@ public sealed record PlannedService(
     IReadOnlyDictionary<string, string> Environment,
     IReadOnlyList<string> DependsOn,
     ContainerHealthcheck? Healthcheck = null,
-    ServiceResources? Resources = null);
+    ServiceResources? Resources = null,
+    string? Hostname = null);
 
 public sealed record ComposePlan(bool Accepted, IReadOnlyList<string> Errors, IReadOnlyList<PlannedService> Services);
 
@@ -139,6 +141,7 @@ public static class ComposePolicy
             }
 
             var healthcheck = ReadHealthcheck(Child(body, "healthcheck"), name, errors);
+            var hostname = ReadServiceHostname(extension, name, errors);
             services.Add(new PlannedService(
                 name,
                 image,
@@ -148,7 +151,8 @@ public static class ComposePolicy
                 ReadEnvironment(Child(body, "environment")),
                 ReadDepends(Child(body, "depends_on")),
                 healthcheck,
-                ReadResources(body, name, errors)));
+                ReadResources(body, name, errors),
+                hostname));
         }
 
         if (services.Count == 0 && errors.Count == 0)
@@ -173,7 +177,108 @@ public static class ComposePolicy
             errors.Add("Service dependencies contain a cycle.");
         }
 
+        if (errors.Count == 0)
+        {
+            var duplicate = DuplicatePublicHostname(services, null);
+            if (duplicate is not null)
+            {
+                errors.Add(duplicate);
+            }
+        }
+
         return new ComposePlan(errors.Count == 0, errors, errors.Count == 0 ? services : []);
+    }
+
+    // Explicit compose hostname wins. Otherwise an exposed service uses the application
+    // hostname. A service that is not exposed, or that has no port, is not published.
+    public static string? RouteHostname(PlannedService service, string? applicationHostname)
+    {
+        if (!service.Exposed || service.Port is null)
+        {
+            return null;
+        }
+
+        return service.Hostname ?? PublicHostname.Normalize(applicationHostname);
+    }
+
+    // Same explicit hostname on two services is rejected. An explicit hostname that
+    // matches another exposed service's application hostname is rejected too.
+    // Exposed services that all omit the field may still share that application hostname.
+    public static string? DuplicatePublicHostname(IReadOnlyList<PlannedService> services, string? applicationHostname)
+    {
+        var applicationHost = PublicHostname.Normalize(applicationHostname);
+        var explicitHosts = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        foreach (var service in services)
+        {
+            if (service.Hostname is null)
+            {
+                continue;
+            }
+
+            if (!explicitHosts.TryGetValue(service.Hostname, out var names))
+            {
+                names = [];
+                explicitHosts[service.Hostname] = names;
+            }
+
+            names.Add(service.Name);
+        }
+
+        foreach (var (host, names) in explicitHosts)
+        {
+            if (names.Count > 1)
+            {
+                return $"Services {QuoteList(names)} use the same public hostname '{host}'.";
+            }
+        }
+
+        if (applicationHost is null || !explicitHosts.TryGetValue(applicationHost, out var claimers))
+        {
+            return null;
+        }
+
+        var fallbacks = services
+            .Where(service => service.Exposed && service.Hostname is null)
+            .Select(service => service.Name)
+            .ToArray();
+        if (fallbacks.Length == 0)
+        {
+            return null;
+        }
+
+        return $"Service '{claimers[0]}' uses public hostname '{applicationHost}', which is also the hostname for {QuoteList(fallbacks)}.";
+    }
+
+    private static string QuoteList(IReadOnlyList<string> names)
+    {
+        var quoted = names.Select(name => "'" + name + "'").ToArray();
+        if (quoted.Length <= 1)
+        {
+            return quoted.Length == 0 ? string.Empty : quoted[0];
+        }
+
+        if (quoted.Length == 2)
+        {
+            return quoted[0] + " and " + quoted[1];
+        }
+
+        return string.Join(", ", quoted[..^1]) + ", and " + quoted[^1];
+    }
+
+    private static string? ReadServiceHostname(YamlMappingNode? extension, string service, List<string> errors)
+    {
+        if (extension is null || Child(extension, "hostname") is not { } node)
+        {
+            return null;
+        }
+
+        if (node is YamlScalarNode && PublicHostname.TryCanonical(Text(node), out var hostname, out _))
+        {
+            return hostname;
+        }
+
+        errors.Add($"Service '{service}': {PublicHostname.InvalidMessage}");
+        return null;
     }
 
     public static IReadOnlyList<PlannedService> StartOrder(IReadOnlyList<PlannedService> services)

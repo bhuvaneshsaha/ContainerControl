@@ -205,6 +205,15 @@ public sealed class DeployService
             return DeployOutcome.Fail(StatusCodes.Status400BadRequest, string.Join(" ", plan.Errors));
         }
 
+        var publicHost = PublicHostname.Normalize(app.Hostname);
+        var duplicateHostname = ComposePolicy.DuplicatePublicHostname(plan.Services, publicHost);
+        if (duplicateHostname is not null)
+        {
+            await RecordAsync(app, "rejected", duplicateHostname, cancellationToken);
+            await _apps.SetStatusAsync(app.Id, "rejected", cancellationToken);
+            return DeployOutcome.Fail(StatusCodes.Status400BadRequest, duplicateHostname);
+        }
+
         var quotaMessage = QuotaPolicy.Rejection(
             await _quotas.FindAsync(app.TeamId, cancellationToken),
             plan.Services.Select(service => service.Resources).ToArray());
@@ -216,15 +225,23 @@ public sealed class DeployService
         }
 
         var anyExposed = plan.Services.Any(service => service.Exposed) || (string.IsNullOrWhiteSpace(app.ComposeYaml) && app.Exposed);
-        var publicHost = PublicHostname.Normalize(app.Hostname);
-        if (anyExposed && (PublicHostname.TraefikHostRule(publicHost) is null || !await _edge.HostnameAllowedAsync(publicHost, cancellationToken)))
+        foreach (var service in plan.Services)
         {
-            var message = publicHost is null
-                ? "Set a hostname under an allowed domain."
-                : "The hostname '" + publicHost + "' is not under an allowed domain.";
-            await RecordAsync(app, "rejected", message, cancellationToken);
-            await _apps.SetStatusAsync(app.Id, "rejected", cancellationToken);
-            return DeployOutcome.Fail(StatusCodes.Status400BadRequest, message);
+            if (!service.Exposed)
+            {
+                continue;
+            }
+
+            var routeHost = service.Hostname ?? publicHost;
+            if (PublicHostname.TraefikHostRule(routeHost) is null || !await _edge.HostnameAllowedAsync(routeHost, cancellationToken))
+            {
+                var message = routeHost is null
+                    ? "Set a hostname under an allowed domain."
+                    : "The hostname '" + routeHost + "' is not under an allowed domain.";
+                await RecordAsync(app, "rejected", message, cancellationToken);
+                await _apps.SetStatusAsync(app.Id, "rejected", cancellationToken);
+                return DeployOutcome.Fail(StatusCodes.Status400BadRequest, message);
+            }
         }
 
         var host = await _hosts.FindAsync(app.HostId, cancellationToken);
@@ -318,7 +335,6 @@ public sealed class DeployService
             var auth = await _registries.ForImageAsync(image, cancellationToken);
             await _engine.PullImageAsync(endpoint, image, auth, cancellationToken);
             var injected = SecretInjection.Apply(service.Environment, service.Command, SecretInjection.ForService(service.Name, scoped));
-            var exposed = service.Exposed;
             var labels = new Dictionary<string, string>
             {
                 ["cc.managed"] = "true",
@@ -326,9 +342,10 @@ public sealed class DeployService
                 ["cc.service"] = service.Name
             };
             var extra = new List<string>();
-            if (exposed && publicHost is not null && service.Port is not null)
+            var routeHost = ComposePolicy.RouteHostname(service, publicHost);
+            if (routeHost is not null && service.Port is int port)
             {
-                foreach (var (key, value) in _edge.LabelsFor(RouterName(app.Id, service.Name), publicHost, service.Port.Value))
+                foreach (var (key, value) in _edge.LabelsFor(RouterName(app.Id, service.Name), routeHost, port))
                 {
                     labels[key] = value;
                 }

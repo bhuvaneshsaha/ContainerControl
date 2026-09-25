@@ -12,6 +12,27 @@ Allowed:
 - `healthcheck` with `test`, `interval`, `timeout`, `retries`, and `start_period`
 - `deploy.resources.limits` with `cpus`, `memory`, and `storage` (for example `cpus: "0.5"`, `memory: 256M`, `storage: 1G`)
 - `x-containercontrol.exposed` and `x-containercontrol.port` to mark a service for Traefik
+- `x-containercontrol.hostname` as an optional public DNS name for that service. An exposed service that omits it uses the application hostname. The value is checked with the same rules as the application hostname: one DNS name, no wildcards, and no routing characters. A pasted URL is reduced to its host. Two services in one file cannot use the same public hostname. That includes the same value on two services, and a service hostname that equals the application hostname another exposed service still uses. That deploy is rejected before any container is created. Several exposed services that all omit the field still share the application hostname. A service that is not exposed is not published, even when it sets a hostname or the application has one.
+
+```yaml
+services:
+  api-a:
+    image: nginx:stable
+    x-containercontrol:
+      exposed: true
+      port: 80
+      hostname: api-a.apps.localhost
+  api-b:
+    image: nginx:stable
+    x-containercontrol:
+      exposed: true
+      port: 80
+      hostname: api-b.apps.localhost
+  worker:
+    image: busybox:1.36.1
+```
+
+`api-a` and `api-b` each receive a Traefik `Host()` rule. `worker` is not exposed, so it stays on the private network. If `api-a` omitted `hostname`, that service would use the application hostname.
 
 When the application's team has a quota, every service must declare all three limits and the sum must fit. CPU and memory are also set on the container. Storage is counted against the team quota. It is not sent as a Docker storage option. A team with no quota can still omit the limits.
 
@@ -24,6 +45,7 @@ Rejected before any container is created:
 - `cap_add`, `devices`, `build`
 - bind mounts and the Docker socket
 - database images, unless that application has `AllowDatabaseImages` set
+- a service hostname that is not a DNS name, or two services that claim the same public hostname
 
 `AllowDatabaseImages` defaults to false. Existing applications stay false. There is no global switch that allows database images. `ComposePolicy` matches product names as whole `-` / `_` tokens in the image name and repository path (the registry host is ignored), so official tags and common vendor tags are rejected together (`postgresql`, `postgis`, `pgvector`, `timescaledb`, `mysql-server`, `mariadb-galera`, `mcr.microsoft.com/mssql/server`, `azure-sql-edge`, Oracle Database editions, and the other data-tier names in `ComposePolicy`). Oracle Linux and client images such as Instant Client are not database images.
 

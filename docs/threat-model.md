@@ -25,7 +25,7 @@ Compose is checked before any Engine call. The policy rejects `privileged`, host
 
 A deploy lease is one row per application and environment. A second deploy of that pair returns 409 Conflict instead of changing the same containers at the same time. The row expires after five minutes, so a holder that stops without releasing it does not block that pair longer than that. See [ADR 0013](adr/0013-deploy-lease-per-application-environment.md).
 
-Application hostnames and allowed domains are stored only as DNS names. A pasted URL is reduced to its host. Backticks, parentheses, and other Traefik rule characters are rejected on save and again when the `Host()` label is built, so a name cannot add a second matcher.
+Application hostnames and allowed domains are stored only as DNS names. A pasted URL is reduced to its host. Backticks, parentheses, and other Traefik rule characters are rejected on save and again when the `Host()` label is built, so a name cannot add a second matcher. A compose service may set `x-containercontrol.hostname`. That value is reduced and checked with the same rules. A repeated public hostname in one compose file is rejected before deploy calls the Engine. Each name that is routed must still sit under an allowed domain. See [ADR 0014](adr/0014-per-service-public-hostnames.md).
 
 Secret and registry values are written to Infisical. A failed deploy is stored as a short message. Messages that look like an assignment are replaced with a generic sentence. ECR refresh logs the exception type and the registry id.
 
