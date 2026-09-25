@@ -112,6 +112,9 @@ public sealed class DeployRequestTests
         var rule = labels["traefik.http.routers.web.rule"];
 
         Assert.Equal("Host(`my-app.apps.example.com`)", rule);
+        Assert.Equal("web", labels["traefik.http.routers.web.entrypoints"]);
+        Assert.False(labels.ContainsKey("traefik.http.routers.web.tls"));
+        Assert.False(labels.ContainsKey("traefik.http.routers.web.tls.certresolver"));
         Assert.DoesNotContain("||", rule);
         Assert.Equal(2, rule.Count(character => character == '`'));
         Assert.DoesNotContain("(", rule[5..^1]);
