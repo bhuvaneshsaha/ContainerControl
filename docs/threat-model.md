@@ -31,18 +31,30 @@ Secret and registry values are written to Infisical. A failed deploy is stored a
 
 Live logs use SignalR at `/hubs/logs`. The hub requires `runtime.logs.read` and team membership. The stream is the Engine log API, not a separate log store.
 
+## Decided mitigations
+
+These rules are accepted in [ADR 0016](adr/0016-traefik-websecure-engine-mtls-and-socket.md). Hyper-V, DNS, and Infisical identity setup stay with the operator, in the list below.
+
+- Public HTTPS. When `Edge:AcmeEmail` / `EDGE_ACME_EMAIL` is set, the same validated `Host()` router (`PublicHostname.TraefikHostRule`, APP-01 and APP-05) emits `websecure`, `tls=true`, and `tls.certresolver=le`. HTTP on `web` redirects to HTTPS. With ACME unset, routers stay on `web` only. The product does not write DNS. Commercial certificates stay with the operator. This wave does not implement `edge.certs.manage`.
+- Engine `tcp://`. Outside Development, registration and connect require the client certificate, client key, and CA from Infisical or from path references on the host row. PostgreSQL stores those references and does not store PEM. Cleartext `tcp://` is rejected with a fixed message that does not include the address. `unix` and `npipe` stay on the local trust boundary. Development may register cleartext `tcp://` for a nested or demo Engine. v1 has no separate lab insecure flag.
+- Traefik socket. Traefik v1 keeps the Docker provider and the host socket mounted read-only, as in [ADR 0004](adr/0004-one-public-ip-traefik-labels.md). The tenant compose Docker socket denylist stays enforced. A socket proxy and a Traefik file provider are deferred and are not a v1 control. That deferral does not reopen PLAT-04.
+
+The `websecure` TLS stamp and the `tcp://` certificate check are the next API change. This note records them as accepted mitigations. The current build does not enforce them yet. The tenant socket denylist is already enforced.
+
+Accepted residual: Traefik holding the host Docker socket is a high-value v1 risk. It stands until a socket proxy or the file provider lands. It is accepted in [ADR 0016](adr/0016-traefik-websecure-engine-mtls-and-socket.md) and is not a reason to reopen PLAT-04.
+
 ## Operator work the product cannot do
 
 These stay outside the API. [Production setup](production-setup.md) is the checklist.
 
-- Create the Hyper-V VMs, install Docker Engine, and keep mutual TLS on the Engine. Do not publish the raw socket.
+- Create the Hyper-V VMs and install Docker Engine. Do not publish the raw socket. The operator still places the client certificate, key, and CA in Infisical or on the host path references. The API stores those references and does not store PEM.
 - Forward ports 80 and 443 to Traefik and create DNS records at the provider. The product does not write DNS.
 - Create the Infisical machine identities and keep each environment's credential on the management host.
 - Create the registry user or access key in ACR, ECR, Docker Hub, or Harbor before saving the connection.
 - Provision data-tier databases. Compose will not run those images.
-- Buy a commercial certificate when Let's Encrypt cannot issue one. Traefik's ACME resolver covers public hostnames only.
-- Rotate the Docker host client certificate on the host, then update the Infisical reference.
+- Buy a commercial certificate when Let's Encrypt cannot issue one. Traefik's ACME resolver covers public hostnames only. This wave does not implement `edge.certs.manage`. The operator installs that certificate outside the API.
+- Rotate the Docker host client certificate, key, and CA, then update the Infisical or path reference. The product does not store PEM.
 
 ## Deferred
 
-Entra ID, Windows container hosts, per-app DNS writes, a long-term log store, auto-scaling, blue/green, canary, alerting, cost dashboards, and a template marketplace are not implemented. The control plane is one management VM. A second Docker host does not receive public traffic by itself.
+Entra ID, Windows container hosts, per-app DNS writes, a long-term log store, auto-scaling, blue/green, canary, alerting, cost dashboards, and a template marketplace are not implemented. A Docker socket proxy and a Traefik file provider are deferred past v1 ([ADR 0016](adr/0016-traefik-websecure-engine-mtls-and-socket.md)). Traefik holding the host socket until then is the accepted residual in that ADR, not an open Critical. The control plane is one management VM. A second Docker host does not receive public traffic by itself.
