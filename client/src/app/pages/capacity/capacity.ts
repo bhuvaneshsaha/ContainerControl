@@ -1,14 +1,24 @@
 import { HttpClient } from '@angular/common/http';
 import { Component, inject, signal } from '@angular/core';
-import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { AbstractControl, FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { MatButtonModule } from '@angular/material/button';
 import { firstValueFrom } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
+import { TeamListResponse } from '../../core/api-models';
 import { runBusy } from '../../core/busy';
 import { FeedbackService } from '../../core/feedback';
+import { runLoad } from '../../core/load-state';
 import { problemMessage } from '../../core/problem-message';
 import { PermissionService } from '../../core/permissions';
+import { controlError, focusFirstInvalid } from '../../shared/field-error';
+import { formatTimestamp } from '../../shared/format-time';
 import { HasPermission } from '../../shared/has-permission';
+import { PageState } from '../../shared/page-state';
+import { RecordList, RecordRow } from '../../shared/record-list';
+import { SectionBlock } from '../../shared/section-block';
+import { SelectOption, SelectField } from '../../shared/select-field';
+import { TextField } from '../../shared/text-field';
 
 interface QuotaResponse {
   teamId: string;
@@ -28,7 +38,7 @@ interface CapacityRow {
 
 @Component({
   selector: 'app-capacity',
-  imports: [ReactiveFormsModule, HasPermission],
+  imports: [ReactiveFormsModule, HasPermission, MatButtonModule, TextField, SelectField, PageState, RecordList, RecordRow, SectionBlock],
   templateUrl: './capacity.html',
 })
 export class Capacity {
@@ -37,9 +47,12 @@ export class Capacity {
   private readonly feedback = inject(FeedbackService);
 
   readonly status = signal<'loading' | 'ready' | 'error'>('loading');
-  readonly busy = signal<string | null>(null);
+  readonly refreshing = signal(false);
+  readonly refreshError = signal(false);
+  readonly busy = signal<ReadonlySet<string>>(new Set());
   readonly quotas = signal<readonly QuotaResponse[]>([]);
   readonly hosts = signal<readonly CapacityRow[]>([]);
+  readonly teams = signal<{ id: string; name: string }[]>([]);
   readonly form = new FormGroup({
     teamId: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
     cpu: new FormControl(1, { nonNullable: true, validators: [Validators.required, Validators.min(0.001)] }),
@@ -51,14 +64,35 @@ export class Capacity {
     void this.load();
   }
 
+  isBusy(key: string): boolean {
+    return this.busy().has(key);
+  }
+
+  fieldError(control: AbstractControl, messages: Record<string, string>): string {
+    return controlError(control, messages);
+  }
+
+  formatTime(value: string): string {
+    return formatTimestamp(value);
+  }
+
+  teamOptions(): SelectOption[] {
+    return [{ value: '', label: 'Select a team' }, ...this.teams().map((team) => ({ value: team.id, label: team.name }))];
+  }
+
+  teamLabel(teamId: string): string {
+    return this.teams().find((team) => team.id === teamId)?.name ?? teamId;
+  }
+
   async load(): Promise<void> {
-    this.status.set('loading');
-    try {
+    await runLoad(this.status, this.refreshing, this.refreshError, async () => {
       if (this.permissions.hasPermission('platform.quotas.manage')) {
-        const response = await firstValueFrom(
-          this.http.get<{ quotas: QuotaResponse[] }>(`${environment.apiUrl}/platform/quotas`),
-        );
-        this.quotas.set(response.quotas);
+        const [quotas, teams] = await Promise.all([
+          firstValueFrom(this.http.get<{ quotas: QuotaResponse[] }>(`${environment.apiUrl}/platform/quotas`)),
+          firstValueFrom(this.http.get<TeamListResponse>(`${environment.apiUrl}/access/teams`)),
+        ]);
+        this.quotas.set(quotas.quotas);
+        this.teams.set(teams.teams);
       }
 
       if (this.permissions.hasPermission('platform.capacity.read')) {
@@ -67,18 +101,19 @@ export class Capacity {
         );
         this.hosts.set(response.hosts);
       }
-
-      this.status.set('ready');
-    } catch {
-      this.status.set('error');
-    }
+    });
   }
 
   async save(): Promise<void> {
     this.feedback.clear();
+    this.form.markAllAsTouched();
     if (this.form.invalid) {
-      this.form.markAllAsTouched();
-      this.feedback.error('Enter a team and a CPU, memory, and storage quota.');
+      focusFirstInvalid([
+        { control: this.form.controls.teamId, id: 'quota-team' },
+        { control: this.form.controls.cpu, id: 'quota-cpu' },
+        { control: this.form.controls.memoryGiB, id: 'quota-memory' },
+        { control: this.form.controls.storageGiB, id: 'quota-storage' },
+      ]);
       return;
     }
 
@@ -88,9 +123,9 @@ export class Capacity {
       try {
         await firstValueFrom(
           this.http.put(`${environment.apiUrl}/platform/quotas/${value.teamId}`, {
-            cpuMillicores: Math.round(value.cpu * 1000),
-            memoryBytes: Math.round(value.memoryGiB * gib),
-            storageBytes: Math.round(value.storageGiB * gib),
+            cpuMillicores: Math.round(Number(value.cpu) * 1000),
+            memoryBytes: Math.round(Number(value.memoryGiB) * gib),
+            storageBytes: Math.round(Number(value.storageGiB) * gib),
           }),
         );
         this.feedback.success('The team quota was saved.');

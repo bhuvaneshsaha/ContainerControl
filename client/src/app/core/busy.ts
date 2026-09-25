@@ -1,18 +1,26 @@
 import { WritableSignal } from '@angular/core';
 
 export async function runBusy(
-  busy: WritableSignal<string | null>,
+  busy: WritableSignal<ReadonlySet<string>>,
   key: string,
   work: () => Promise<void>,
 ): Promise<void> {
-  if (busy() !== null) {
+  if (busy().has(key)) {
     return;
   }
 
-  busy.set(key);
+  busy.update((current) => {
+    const next = new Set(current);
+    next.add(key);
+    return next;
+  });
   try {
     await work();
   } finally {
-    busy.set(null);
+    busy.update((current) => {
+      const next = new Set(current);
+      next.delete(key);
+      return next;
+    });
   }
 }

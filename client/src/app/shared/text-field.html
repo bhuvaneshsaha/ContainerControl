@@ -1,0 +1,45 @@
+<div class="mb-3 block w-full max-w-xl">
+  <mat-form-field appearance="outline" subscriptSizing="dynamic" class="w-full">
+    <mat-label>{{ label() }}</mat-label>
+    @if (rows() > 0) {
+      <textarea
+        matInput
+        [id]="inputId()"
+        [rows]="rows()"
+        [value]="shownValue()"
+        [readonly]="readOnly()"
+        [disabled]="isDisabled()"
+        [errorStateMatcher]="matcher"
+        [attr.aria-invalid]="error() ? true : null"
+        [attr.aria-describedby]="error() ? inputId() + '-error' : null"
+        (input)="onInput($event)"
+        (blur)="touch()"
+      ></textarea>
+    } @else {
+      <input
+        matInput
+        [id]="inputId()"
+        [type]="type()"
+        [value]="shownValue()"
+        [readonly]="readOnly()"
+        [disabled]="isDisabled()"
+        [attr.autocomplete]="autocomplete()"
+        [attr.inputmode]="inputMode()"
+        [attr.min]="min()"
+        [attr.max]="max()"
+        [attr.step]="step()"
+        [errorStateMatcher]="matcher"
+        [attr.aria-invalid]="error() ? true : null"
+        [attr.aria-describedby]="error() ? inputId() + '-error' : null"
+        (input)="onInput($event)"
+        (blur)="touch()"
+      />
+    }
+    @if (hint()) {
+      <mat-hint>{{ hint() }}</mat-hint>
+    }
+  </mat-form-field>
+  @if (error()) {
+    <p class="m-0 text-sm text-red-900" role="alert" [id]="inputId() + '-error'">{{ error() }}</p>
+  }
+</div>

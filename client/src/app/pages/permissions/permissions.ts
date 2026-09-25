@@ -8,12 +8,13 @@ import { CurrentUserPermissionsResponse } from '../../core/api-models';
 import { homeLabel, resolveHomePath } from '../../core/home';
 import { groupPermissions } from '../../core/permission-labels';
 import { PermissionService } from '../../core/permissions';
+import { PageState } from '../../shared/page-state';
+import { SectionBlock } from '../../shared/section-block';
 
 @Component({
   selector: 'app-permissions',
-  imports: [RouterLink],
+  imports: [RouterLink, PageState, SectionBlock],
   templateUrl: './permissions.html',
-  styleUrl: './permissions.css',
 })
 export class Permissions {
   private readonly http = inject(HttpClient);

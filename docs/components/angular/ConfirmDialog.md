@@ -61,10 +61,12 @@ if (!confirmed) {
 ```
 
 ## Accessibility
-The panel is `role="alertdialog"` with `aria-modal="true"`, `aria-labelledby`, and `aria-describedby`. Cancel is focused when the dialog opens. Escape cancels. Focus is not trapped beyond that initial focus.
+The panel is `role="alertdialog"` with `aria-modal="true"`, `aria-labelledby`, and `aria-describedby`. `cdkTrapFocus` keeps Tab inside the panel. Cancel is focused when the dialog opens. Escape and a click on the backdrop cancel. While the dialog is open, the skip link, header, and main are `inert`. On close, `inert` is removed and focus returns to the control that called `ask`.
+
+An irreversible confirm uses a stroked warn button. An ordinary confirm uses a stroked button. Cancel stays first.
 
 ## Dependencies
-`ConfirmService`. No component library.
+`ConfirmService`, Angular CDK `A11yModule`, and Angular Material stroked buttons.
 
 ## Do
 - Focus the safe action by leaving Cancel first.

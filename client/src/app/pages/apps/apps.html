@@ -1,183 +1,200 @@
-<h1>Applications</h1>
-<form *appHasPermission="'apps.write'" [formGroup]="form" (ngSubmit)="create()">
-  <label for="app-name">Name</label>
-  <input id="app-name" formControlName="name" />
-  <label for="app-team">Team</label>
-  <select id="app-team" formControlName="teamId">
-    <option value="">Select a team</option>
-    @for (team of teams(); track team.id) {
-      <option [value]="team.id">{{ team.name }}</option>
-    }
-  </select>
-  <label for="app-host">Docker host</label>
-  <select id="app-host" formControlName="hostId">
-    <option value="">Select a host</option>
-    @for (host of hosts(); track host.id) {
-      <option [value]="host.id">{{ host.name }}</option>
-    }
-  </select>
-  <label for="app-environment">Environment</label>
-  <select id="app-environment" formControlName="environment">
-    <option value="dev">dev</option>
-    <option value="staging">staging</option>
-    <option value="prod">prod</option>
-  </select>
-  <label for="app-compose">Compose file</label>
-  <textarea id="app-compose" formControlName="composeYaml"></textarea>
-  <label for="app-port">Internal port</label>
-  <input id="app-port" formControlName="internalPort" inputmode="numeric" />
-  <label for="app-hostname">Hostname</label>
-  <input id="app-hostname" formControlName="hostname" />
-  <label for="app-exposed"><input id="app-exposed" type="checkbox" formControlName="exposed" /> Exposed</label>
-  <label for="app-approval"><input id="app-approval" type="checkbox" formControlName="requireApproval" /> Require approval</label>
-  <p>Production stays pending until someone with deploy approval accepts it.</p>
-  <div *appHasPermission="'platform.settings.manage'">
-    <label for="app-database"><input id="app-database" type="checkbox" formControlName="allowDatabaseImages" /> Allow database images</label>
-    <p>Off by default. Enabling this lets the application run database containers on the app host. That is an exception to the data tier.</p>
-  </div>
-  <button type="submit" [disabled]="busy() !== null">{{ busy() === 'create' ? 'Saving…' : 'Save application' }}</button>
-</form>
-@if (editing(); as app) {
-  <form *appHasPermission="'apps.write'" [formGroup]="editForm" (ngSubmit)="saveEdit()">
-    <h2>Edit {{ app.name }}</h2>
-    <p>Team <span id="edit-app-team">{{ teamName(app) }}</span></p>
-    <p>Environment <span id="edit-app-environment">{{ app.environment }}</span></p>
-    <p>Team and environment stay as they were when the application was created.</p>
-    <label for="edit-app-name">Name</label>
-    <input id="edit-app-name" formControlName="name" />
-    <label for="edit-app-host">Docker host</label>
-    <select id="edit-app-host" formControlName="hostId">
-      <option value="">Select a host</option>
-      @if (!hostKnown(app.hostId)) {
-        <option [value]="app.hostId">Current host</option>
-      }
-      @for (host of hosts(); track host.id) {
-        <option [value]="host.id">{{ host.name }}</option>
-      }
-    </select>
-    <p>A different Docker host is used the next time this application is deployed.</p>
-    <label for="edit-app-image">Image</label>
-    <input id="edit-app-image" formControlName="image" />
-    <label for="edit-app-compose">Compose file</label>
-    <textarea id="edit-app-compose" formControlName="composeYaml"></textarea>
-    <label for="edit-app-command">Command</label>
-    <textarea id="edit-app-command" formControlName="command"></textarea>
-    <p>One argument per line. Leave the image blank when the compose file sets images.</p>
-    <label for="edit-app-port">Internal port</label>
-    <input id="edit-app-port" formControlName="internalPort" inputmode="numeric" />
-    <label for="edit-app-hostname">Hostname</label>
-    <input id="edit-app-hostname" formControlName="hostname" />
-    <label for="edit-app-exposed"><input id="edit-app-exposed" type="checkbox" formControlName="exposed" /> Exposed</label>
-    <label for="edit-app-approval"><input id="edit-app-approval" type="checkbox" formControlName="requireApproval" /> Require approval</label>
-    <p>Production stays pending until someone with deploy approval accepts it.</p>
-    <div *appHasPermission="'platform.settings.manage'">
-      <label for="edit-app-database"><input id="edit-app-database" type="checkbox" formControlName="allowDatabaseImages" /> Allow database images</label>
-      <p>Off by default. Enabling this lets the application run database containers on the app host. That is an exception to the data tier.</p>
-    </div>
-    <button type="submit" [disabled]="busy() !== null">{{ busy() === 'edit' ? 'Saving…' : 'Save changes' }}</button>
-    <button type="button" [disabled]="busy() !== null" (click)="cancelEdit()">Cancel</button>
-  </form>
-}
+<div class="mb-4 flex flex-wrap items-baseline gap-3">
+  <h1 class="m-0">Applications</h1>
+  @if (status() === 'ready' && refreshing()) {
+    <p class="m-0 text-sm text-neutral-600" role="status">Refreshing…</p>
+  }
+</div>
 @if (status() === 'loading') {
-  <p>Loading applications.</p>
+  <div aria-busy="true">
+    <app-page-state kind="loading" message="Loading applications." />
+  </div>
 } @else if (status() === 'error') {
-  <p>Applications could not be loaded.</p>
-} @else if (apps().length === 0) {
-  <p>No applications are registered yet.</p>
+  <app-page-state kind="error" message="Applications could not be loaded." (retry)="load()" />
 } @else {
-  <ul>
-    @for (app of apps(); track app.id) {
-      <li>
-        {{ app.name }} ({{ app.environment }}) {{ app.status }}
-        @if (app.allowDatabaseImages) {
-          <span>Database images allowed</span>
-        }
-        <button type="button" *appHasPermission="'deploy.execute'" [disabled]="busy() !== null" (click)="act(app, 'deploy')">
-          {{ busy() === actionKey(app, 'deploy') ? 'Deploying…' : 'Deploy' }}
-        </button>
-        @if (app.status === 'pending-approval') {
-          <button type="button" *appHasPermission="'deploy.approve'" [disabled]="busy() !== null" (click)="act(app, 'approve')">
-            {{ busy() === actionKey(app, 'approve') ? 'Approving…' : 'Approve' }}
-          </button>
-        }
-        <button type="button" *appHasPermission="'runtime.control'" [disabled]="busy() !== null" (click)="act(app, 'start')">
-          {{ busy() === actionKey(app, 'start') ? 'Starting…' : 'Start' }}
-        </button>
-        <button type="button" *appHasPermission="'runtime.control'" [disabled]="busy() !== null" (click)="act(app, 'stop')">
-          {{ busy() === actionKey(app, 'stop') ? 'Stopping…' : 'Stop' }}
-        </button>
-        <button type="button" *appHasPermission="'runtime.control'" [disabled]="busy() !== null" (click)="act(app, 'restart')">
-          {{ busy() === actionKey(app, 'restart') ? 'Restarting…' : 'Restart' }}
-        </button>
-        <button type="button" *appHasPermission="'deploy.rollback'" [disabled]="busy() !== null" (click)="act(app, 'rollback')">
-          {{ busy() === actionKey(app, 'rollback') ? 'Rolling back…' : 'Rollback' }}
-        </button>
-        <button type="button" *appHasPermission="'secrets.read'" [disabled]="busy() !== null" (click)="openSecrets(app)">Secrets</button>
-        <button type="button" *appHasPermission="'runtime.logs.read'" [disabled]="busy() !== null" (click)="logs(app)">Logs</button>
-        <button type="button" *appHasPermission="'runtime.logs.read'" [disabled]="busy() !== null" (click)="live(app)">Live logs</button>
-        <button type="button" *appHasPermission="'runtime.stats.read'" [disabled]="busy() !== null" (click)="stats(app)">Stats</button>
-        <button type="button" *appHasPermission="'apps.write'" [disabled]="busy() !== null" (click)="openEdit(app)">Edit</button>
-        <button type="button" *appHasPermission="'apps.write'" [disabled]="busy() !== null" (click)="remove(app)">
-          {{ busy() === 'remove:' + app.id ? 'Removing…' : 'Remove' }}
-        </button>
-      </li>
-    }
-  </ul>
-  @if (selected(); as app) {
-    <h2>Secrets for {{ app.name }}</h2>
-    @if (secretWriteState(app) === 'form') {
-      <form [formGroup]="secretForm" (ngSubmit)="saveSecret()">
-        <label for="secret-name">Name</label>
-        <input id="secret-name" formControlName="name" />
-        <label for="secret-mode">Injection</label>
-        <select id="secret-mode" formControlName="injectionMode">
-          <option value="env">Environment variable</option>
-          <option value="file">File</option>
-        </select>
-        <label for="secret-value">Value</label>
-        <input id="secret-value" type="password" formControlName="value" />
-        <fieldset>
-          <legend>Services</legend>
-          @if (serviceChoices().length === 0) {
-            <p>This application has no services to assign.</p>
-          } @else {
-            @for (service of serviceChoices(); track service) {
-              <label [attr.for]="'secret-service-' + service">
-                <input
-                  [id]="'secret-service-' + service"
-                  type="checkbox"
-                  [checked]="serviceSelected(service)"
-                  #serviceBox
-                  (change)="toggleService(service, serviceBox.checked)" />
-                {{ service }}
-              </label>
+  @if (refreshError()) {
+    <app-page-state kind="error" message="Applications could not be loaded." (retry)="load()" />
+  }
+  @if (apps().length === 0) {
+    <app-page-state kind="empty" message="No applications are registered yet. Use New application to add one." />
+  } @else {
+    <app-record-list>
+      @for (app of apps(); track app.id) {
+        <app-record-row>
+          <span recordTitle>{{ app.name }}</span>
+          <span recordMeta>
+            {{ app.environment }}
+            @if (app.hostname) {
+              <span> · {{ app.hostname }}</span>
+            }
+          </span>
+          <app-status-badge recordStatus kind="deploy" [status]="app.status" />
+          @if (app.allowDatabaseImages) {
+            <app-status-badge recordStatus status="Database images allowed" />
+          }
+          <div recordActions class="flex flex-col items-start gap-2">
+            @if (can('deploy.execute') || (app.status === 'pending-approval' && can('deploy.approve'))) {
+              <app-action-cluster label="Deploy">
+                <button mat-stroked-button type="button" *appHasPermission="'deploy.execute'" [disabled]="isBusy(actionKey(app, 'deploy'))" [attr.aria-busy]="isBusy(actionKey(app, 'deploy'))" (click)="act(app, 'deploy')">
+                  {{ isBusy(actionKey(app, 'deploy')) ? 'Deploying…' : 'Deploy' }}
+                </button>
+                @if (app.status === 'pending-approval') {
+                  <button mat-stroked-button type="button" *appHasPermission="'deploy.approve'" [disabled]="isBusy(actionKey(app, 'approve'))" [attr.aria-busy]="isBusy(actionKey(app, 'approve'))" (click)="act(app, 'approve')">
+                    {{ isBusy(actionKey(app, 'approve')) ? 'Approving…' : 'Approve' }}
+                  </button>
+                }
+              </app-action-cluster>
+            }
+            @if (can('runtime.control')) {
+              <app-action-cluster label="Runtime">
+                <button mat-stroked-button type="button" *appHasPermission="'runtime.control'" [disabled]="isBusy(actionKey(app, 'start'))" [attr.aria-busy]="isBusy(actionKey(app, 'start'))" (click)="act(app, 'start')">
+                  {{ isBusy(actionKey(app, 'start')) ? 'Starting…' : 'Start' }}
+                </button>
+                <button mat-stroked-button type="button" *appHasPermission="'runtime.control'" [disabled]="isBusy(actionKey(app, 'stop'))" [attr.aria-busy]="isBusy(actionKey(app, 'stop'))" (click)="act(app, 'stop')">
+                  {{ isBusy(actionKey(app, 'stop')) ? 'Stopping…' : 'Stop' }}
+                </button>
+                <button mat-stroked-button type="button" *appHasPermission="'runtime.control'" [disabled]="isBusy(actionKey(app, 'restart'))" [attr.aria-busy]="isBusy(actionKey(app, 'restart'))" (click)="act(app, 'restart')">
+                  {{ isBusy(actionKey(app, 'restart')) ? 'Restarting…' : 'Restart' }}
+                </button>
+              </app-action-cluster>
+            }
+            @if (can('deploy.rollback')) {
+              <app-action-cluster label="Rollback">
+                <button mat-stroked-button type="button" *appHasPermission="'deploy.rollback'" [disabled]="isBusy(actionKey(app, 'rollback'))" [attr.aria-busy]="isBusy(actionKey(app, 'rollback'))" (click)="act(app, 'rollback')">
+                  {{ isBusy(actionKey(app, 'rollback')) ? 'Rolling back…' : 'Rollback' }}
+                </button>
+              </app-action-cluster>
+            }
+            @if (can('secrets.read') || can('runtime.logs.read') || can('runtime.stats.read')) {
+              <app-action-cluster label="Inspect">
+                <button mat-stroked-button type="button" *appHasPermission="'secrets.read'" [disabled]="isBusy('secrets:' + app.id)" (click)="openSecrets(app)">Secrets</button>
+                <button mat-stroked-button type="button" *appHasPermission="'runtime.logs.read'" [disabled]="isBusy('logs:' + app.id)" [attr.aria-busy]="isBusy('logs:' + app.id)" (click)="logs(app)">Logs</button>
+                <button mat-stroked-button type="button" *appHasPermission="'runtime.logs.read'" [disabled]="isBusy('live:' + app.id)" [attr.aria-busy]="isBusy('live:' + app.id)" (click)="live(app)">Live logs</button>
+                <button mat-stroked-button type="button" *appHasPermission="'runtime.stats.read'" [disabled]="isBusy('stats:' + app.id)" [attr.aria-busy]="isBusy('stats:' + app.id)" (click)="stats(app)">Stats</button>
+              </app-action-cluster>
+            }
+            @if (can('apps.write')) {
+              <app-action-cluster label="Maintain">
+                <button mat-stroked-button type="button" *appHasPermission="'apps.write'" (click)="openEdit(app)">Edit</button>
+                <button mat-stroked-button type="button" *appHasPermission="'apps.write'" [disabled]="isBusy('remove:' + app.id)" [attr.aria-busy]="isBusy('remove:' + app.id)" (click)="remove(app)">
+                  {{ isBusy('remove:' + app.id) ? 'Removing…' : 'Remove' }}
+                </button>
+              </app-action-cluster>
+            }
+          </div>
+          @if (editing()?.id === app.id) {
+            <form class="mt-4 max-w-xl rounded-lg border border-neutral-200 bg-neutral-50 p-4" [formGroup]="editForm" (ngSubmit)="saveEdit()">
+              <h2>Editing {{ app.name }}</h2>
+              <p>Team <span id="edit-app-team">{{ teamName(app) }}</span></p>
+              <p>Environment <span id="edit-app-environment">{{ app.environment }}</span></p>
+              <p>Team and environment stay as they were when the application was created.</p>
+              <app-text-field label="Name" inputId="edit-app-name" formControlName="name" [error]="fieldError(editForm.controls.name, { required: 'Enter a name.' })" />
+              <app-select-field label="Docker host" inputId="edit-app-host" hint="A different Docker host is used the next time this application is deployed." formControlName="hostId" [options]="editHostOptions(app)" [error]="fieldError(editForm.controls.hostId, { required: 'Select a Docker host.' })" />
+              <app-text-field label="Image" inputId="edit-app-image" hint="Leave the image blank when the compose file sets images." formControlName="image" [error]="fieldError(editForm.controls.image, { imageOrCompose: 'Enter an image or a compose file.' })" />
+              <app-text-field label="Compose file" inputId="edit-app-compose" [rows]="8" formControlName="composeYaml" [error]="fieldError(editForm.controls.composeYaml, { imageOrCompose: 'Enter an image or a compose file.' })" />
+              <app-text-field label="Command" inputId="edit-app-command" hint="One argument per line." [rows]="4" formControlName="command" />
+              <app-text-field label="Internal port" inputId="edit-app-port" inputMode="numeric" formControlName="internalPort" />
+              <app-text-field label="Hostname" inputId="edit-app-hostname" formControlName="hostname" />
+              <div class="mt-3 flex flex-col gap-2">
+                <app-checkbox-field label="Exposed" inputId="edit-app-exposed" formControlName="exposed" />
+                <app-checkbox-field label="Require approval" inputId="edit-app-approval" formControlName="requireApproval" />
+              </div>
+              <p>Production stays pending until someone with deploy approval accepts it.</p>
+              <div *appHasPermission="'platform.settings.manage'">
+                <app-checkbox-field label="Allow database images" inputId="edit-app-database" formControlName="allowDatabaseImages" />
+                <p>Off by default. Enabling this lets the application run database containers on the app host. That is an exception to the data tier.</p>
+              </div>
+              <div class="mt-3 flex flex-wrap gap-2">
+                <button mat-flat-button type="submit" [disabled]="isBusy('edit')" [attr.aria-busy]="isBusy('edit')">{{ isBusy('edit') ? 'Saving…' : 'Save changes' }}</button>
+                <button mat-stroked-button type="button" [disabled]="isBusy('edit')" (click)="cancelEdit()">Cancel</button>
+              </div>
+            </form>
+          }
+          @if (inspect(); as panel) {
+            @if (panel.appId === app.id) {
+              <section class="mt-4 rounded-lg border border-neutral-200 bg-neutral-50 p-4" [attr.aria-labelledby]="'inspect-' + app.id">
+                <h2 [id]="'inspect-' + app.id" class="text-lg">{{ inspectTitle(app) }}</h2>
+                @if (panel.kind === 'secrets') {
+                  @if (secretWriteState(app) === 'form') {
+                    <form [formGroup]="secretForm" (ngSubmit)="saveSecret()">
+                      <app-text-field label="Name" inputId="secret-name" formControlName="name" [error]="fieldError(secretForm.controls.name, { required: 'Enter a secret name.' })" />
+                      <app-select-field label="Injection" inputId="secret-mode" formControlName="injectionMode" [options]="injectionOptions" />
+                      <app-text-field label="Value" inputId="secret-value" type="password" formControlName="value" [error]="fieldError(secretForm.controls.value, { required: 'Enter a secret value.' })" />
+                      <fieldset id="secret-services" class="mt-3 border border-neutral-200 p-3" tabindex="-1" [attr.aria-describedby]="secretServiceError() ? 'secret-services-error' : null">
+                        <legend>Services</legend>
+                        @if (serviceChoices().length === 0) {
+                          <p>This application has no services to assign.</p>
+                        } @else {
+                          <div class="flex flex-col gap-2">
+                            @for (service of serviceChoices(); track service) {
+                              <app-checkbox-field [inputId]="'secret-service-' + service" [checked]="serviceSelected(service)" (checkedChange)="toggleService(service, $event)">
+                                {{ service }}
+                              </app-checkbox-field>
+                            }
+                          </div>
+                        }
+                        @if (secretServiceError()) {
+                          <p id="secret-services-error" role="alert">{{ secretServiceError() }}</p>
+                        }
+                      </fieldset>
+                      <p>This secret is injected only into the services selected here. Service names from other applications stay assigned.</p>
+                      <button mat-flat-button type="submit" [disabled]="isBusy('secret')" [attr.aria-busy]="isBusy('secret')">{{ isBusy('secret') ? 'Saving…' : 'Save secret' }}</button>
+                    </form>
+                  } @else if (secretWriteState(app) === 'prod') {
+                    <p>Production secrets need Manage production secrets.</p>
+                  }
+                  @if (secrets().length === 0) {
+                    <p>This application has no secrets yet.</p>
+                  } @else {
+                    <app-record-list>
+                      @for (secret of secrets(); track secret.id) {
+                        <app-record-row>
+                          <span recordTitle>{{ secret.name }} ({{ secret.injectionMode }}) → {{ serviceTargetLabel(secret) }}</span>
+                          <div recordActions>
+                            @if (secretWriteState(app) === 'form') {
+                              <button mat-stroked-button type="button" [disabled]="isBusy('delete:' + secret.id)" [attr.aria-busy]="isBusy('delete:' + secret.id)" (click)="deleteSecret(secret)">
+                                {{ isBusy('delete:' + secret.id) ? 'Deleting…' : 'Delete' }}
+                              </button>
+                            }
+                          </div>
+                        </app-record-row>
+                      }
+                    </app-record-list>
+                  }
+                } @else {
+                  <pre class="overflow-x-auto whitespace-pre-wrap rounded border border-neutral-200 bg-white p-3 text-sm">{{ detail() }}</pre>
+                  @if (panel.kind === 'live') {
+                    <button mat-stroked-button type="button" (click)="stopLive()">Stop</button>
+                  }
+                }
+              </section>
             }
           }
-        </fieldset>
-        <p>This secret is injected only into the services selected here. Service names from other applications stay assigned.</p>
-        <button type="submit" [disabled]="busy() !== null">{{ busy() === 'secret' ? 'Saving…' : 'Save secret' }}</button>
-      </form>
-    } @else if (secretWriteState(app) === 'prod') {
-      <p>Production secrets need Manage production secrets.</p>
-    }
-    @if (secrets().length === 0) {
-      <p>This application has no secrets yet.</p>
-    } @else {
-      <ul>
-        @for (secret of secrets(); track secret.id) {
-          <li>
-            {{ secret.name }} ({{ secret.injectionMode }}) → {{ serviceTargetLabel(secret) }}
-            @if (secretWriteState(app) === 'form') {
-              <button type="button" [disabled]="busy() !== null" (click)="deleteSecret(secret)">
-                {{ busy() === 'delete:' + secret.id ? 'Deleting…' : 'Delete' }}
-              </button>
-            }
-          </li>
-        }
-      </ul>
-    }
+        </app-record-row>
+      }
+    </app-record-list>
   }
-}
-@if (detail()) {
-  <pre>{{ detail() }}</pre>
+  <div *appHasPermission="'apps.write'">
+    <details #createDetails class="mt-8 max-w-xl rounded-lg border border-neutral-300 bg-white p-4">
+      <summary class="cursor-pointer font-medium">New application</summary>
+      <form class="mt-4" [formGroup]="form" (ngSubmit)="create()">
+        <app-text-field label="Name" inputId="app-name" formControlName="name" [error]="fieldError(form.controls.name, { required: 'Enter a name.' })" />
+        <app-select-field label="Team" inputId="app-team" formControlName="teamId" [options]="teamOptions()" [error]="fieldError(form.controls.teamId, { required: 'Select a team.' })" />
+        <app-select-field label="Docker host" inputId="app-host" formControlName="hostId" [options]="hostOptions()" [error]="fieldError(form.controls.hostId, { required: 'Select a Docker host.' })" />
+        <app-select-field label="Environment" inputId="app-environment" formControlName="environment" [options]="environmentOptions" />
+        <app-text-field label="Compose file" inputId="app-compose" [rows]="8" formControlName="composeYaml" [error]="fieldError(form.controls.composeYaml, { required: 'Enter a compose file.' })" />
+        <app-text-field label="Internal port" inputId="app-port" inputMode="numeric" formControlName="internalPort" />
+        <app-text-field label="Hostname" inputId="app-hostname" formControlName="hostname" />
+        <div class="mt-3 flex flex-col gap-2">
+          <app-checkbox-field label="Exposed" inputId="app-exposed" formControlName="exposed" />
+          <app-checkbox-field label="Require approval" inputId="app-approval" formControlName="requireApproval" />
+        </div>
+        <p>Production stays pending until someone with deploy approval accepts it.</p>
+        <div *appHasPermission="'platform.settings.manage'">
+          <app-checkbox-field label="Allow database images" inputId="app-database" formControlName="allowDatabaseImages" />
+          <p>Off by default. Enabling this lets the application run database containers on the app host. That is an exception to the data tier.</p>
+        </div>
+        <button mat-flat-button type="submit" [disabled]="isBusy('create')" [attr.aria-busy]="isBusy('create')">{{ isBusy('create') ? 'Saving…' : 'Save application' }}</button>
+      </form>
+    </details>
+  </div>
 }

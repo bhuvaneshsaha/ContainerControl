@@ -1,0 +1,8 @@
+<mat-chip-set class="pointer-events-none">
+  <mat-chip>
+    @if (kind() === 'deploy') {
+      <span class="sr-only">Deploy status: </span>
+    }
+    {{ label() }}
+  </mat-chip>
+</mat-chip-set>

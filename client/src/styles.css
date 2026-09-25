@@ -1,116 +1,36 @@
-:root {
-  font-family: sans-serif;
-  color: #1a1a1a;
-  background: #fff;
-}
+@import "tailwindcss";
 
-body {
-  margin: 0;
-}
+@layer base {
+  html {
+    font-family: ui-sans-serif, system-ui, sans-serif;
+  }
 
-main {
-  padding: 1rem;
-  max-width: 40rem;
-}
+  body {
+    margin: 0;
+    background: #f4f6f8;
+    color: #1a1a1a;
+  }
 
-label {
-  display: block;
-  margin-top: 0.75rem;
-}
+  h1 {
+    margin: 0 0 1rem;
+    font-size: 1.5rem;
+    font-weight: 600;
+  }
 
-input,
-select,
-textarea {
-  display: block;
-  margin-top: 0.25rem;
-  min-width: 16rem;
-}
+  h2 {
+    margin: 0 0 0.75rem;
+    font-size: 1.25rem;
+    font-weight: 600;
+  }
 
-textarea {
-  min-height: 8rem;
-}
+  h3 {
+    margin: 0 0 0.5rem;
+    font-size: 1.05rem;
+    font-weight: 600;
+  }
 
-button,
-a {
-  font: inherit;
-}
-
-ul {
-  padding-left: 1.25rem;
-}
-
-button:disabled {
-  opacity: 0.6;
-}
-
-:focus-visible {
-  outline: 2px solid #1a1a1a;
-  outline-offset: 2px;
-}
-
-.feedback-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.feedback {
-  display: flex;
-  gap: 0.75rem;
-  align-items: center;
-  justify-content: space-between;
-  margin: 0 0 0.75rem;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid #1a1a1a;
-}
-
-.feedback-alert {
-  border-color: #8a1f11;
-}
-
-.confirm-backdrop {
-  position: fixed;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1rem;
-  background: rgba(0, 0, 0, 0.4);
-}
-
-.confirm-panel {
-  width: min(28rem, 100%);
-  padding: 1rem;
-  background: #fff;
-  border: 1px solid #1a1a1a;
-}
-
-.confirm-panel h2,
-.confirm-panel p {
-  margin-top: 0;
-}
-
-.confirm-warning {
-  font-weight: 600;
-}
-
-.confirm-actions {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.token-panel {
-  margin-top: 1rem;
-  padding: 0.75rem;
-  border: 1px solid #1a1a1a;
-}
-
-.token-panel input {
-  width: 100%;
-  max-width: 100%;
-}
-
-.permission-code {
-  display: block;
-  color: #333;
+  :focus-visible {
+    outline: 2px solid #1a1a1a;
+    outline-offset: 2px;
+  }
 }

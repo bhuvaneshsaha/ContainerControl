@@ -1,6 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Component, inject, signal } from '@angular/core';
-import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { AbstractControl, FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { MatButtonModule } from '@angular/material/button';
 import { firstValueFrom } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
@@ -8,13 +9,18 @@ import { HostListResponse, HostSummary } from '../../core/api-models';
 import { runBusy } from '../../core/busy';
 import { ConfirmService } from '../../core/confirm';
 import { FeedbackService } from '../../core/feedback';
+import { runLoad } from '../../core/load-state';
 import { problemMessage } from '../../core/problem-message';
+import { ActionCluster } from '../../shared/action-cluster';
+import { controlError, focusFirstInvalid } from '../../shared/field-error';
+import { TextField } from '../../shared/text-field';
+import { PageState } from '../../shared/page-state';
+import { RecordList, RecordRow } from '../../shared/record-list';
 
 @Component({
   selector: 'app-hosts',
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, MatButtonModule, TextField, PageState, RecordList, RecordRow, ActionCluster],
   templateUrl: './hosts.html',
-  styleUrl: './hosts.css',
 })
 export class Hosts {
   private readonly http = inject(HttpClient);
@@ -22,7 +28,9 @@ export class Hosts {
   private readonly confirm = inject(ConfirmService);
 
   readonly status = signal<'loading' | 'ready' | 'error'>('loading');
-  readonly busy = signal<string | null>(null);
+  readonly refreshing = signal(false);
+  readonly refreshError = signal(false);
+  readonly busy = signal<ReadonlySet<string>>(new Set());
   readonly hosts = signal<readonly HostSummary[]>([]);
   readonly form = new FormGroup({
     name: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
@@ -36,22 +44,29 @@ export class Hosts {
     void this.load();
   }
 
+  isBusy(key: string): boolean {
+    return this.busy().has(key);
+  }
+
+  fieldError(control: AbstractControl, messages: Record<string, string>): string {
+    return controlError(control, messages);
+  }
+
   async load(): Promise<void> {
-    this.status.set('loading');
-    try {
+    await runLoad(this.status, this.refreshing, this.refreshError, async () => {
       const response = await firstValueFrom(this.http.get<HostListResponse>(`${environment.apiUrl}/platform/hosts`));
       this.hosts.set(response.hosts);
-      this.status.set('ready');
-    } catch {
-      this.status.set('error');
-    }
+    });
   }
 
   async register(): Promise<void> {
     this.feedback.clear();
+    this.form.markAllAsTouched();
     if (this.form.invalid) {
-      this.form.markAllAsTouched();
-      this.feedback.error('Enter a host name and an Engine endpoint.');
+      focusFirstInvalid([
+        { control: this.form.controls.name, id: 'host-name' },
+        { control: this.form.controls.endpoint, id: 'host-endpoint' },
+      ]);
       return;
     }
 

@@ -51,8 +51,17 @@ describe('Access', () => {
     fixture.detectChanges();
     const text = fixture.nativeElement.textContent as string;
     expect(text).toContain('Read applications (apps.read)');
+    expect(fixture.nativeElement.querySelector('legend')?.textContent).toContain('Applications');
     expect(text).toContain('access.role.created');
+    expect(text).toContain('Recent audit entries');
+    expect(fixture.nativeElement.querySelector('time')?.getAttribute('datetime')).toBe('2026-09-24T00:00:00Z');
     expect(fixture.nativeElement.querySelector('[id="perm-apps.read"]')).not.toBeNull();
     expect(text).toContain('does not open a shell');
+    expect(fixture.nativeElement.querySelector('#grant-user')).not.toBeNull();
+
+    const edit = [...fixture.nativeElement.querySelectorAll('button')].find((button) => button.textContent?.includes('Edit')) as HTMLButtonElement;
+    edit.click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Editing Developer');
   });
 });

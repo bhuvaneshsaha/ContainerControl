@@ -19,6 +19,7 @@ describe('Capacity', () => {
     fixture = TestBed.createComponent(Capacity);
     const http = TestBed.inject(HttpTestingController);
     http.expectOne(`${environment.apiUrl}/platform/quotas`).flush({ quotas: [] });
+    http.expectOne(`${environment.apiUrl}/access/teams`).flush({ teams: [{ id: 'team-1', name: 'Platform' }] });
     await fixture.whenStable();
     http.expectOne(`${environment.apiUrl}/platform/capacity`).flush({
       hosts: [{ hostId: 'h1', hostName: 'edge', cpuCount: 4, memoryBytes: 8589934592, storageBytes: 107374182400, readAtUtc: '2026-09-24T00:00:00Z' }],
@@ -28,6 +29,7 @@ describe('Capacity', () => {
   });
 
   it('edits team CPU, memory, and storage and shows the capacity table', () => {
+    fixture.detectChanges();
     const page = fixture.nativeElement as HTMLElement;
     expect(page.querySelector('#quota-cpu')).not.toBeNull();
     expect(page.querySelector('#quota-memory')).not.toBeNull();

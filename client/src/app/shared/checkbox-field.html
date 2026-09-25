@@ -1,0 +1,12 @@
+<mat-checkbox
+  class="max-w-xl"
+  [id]="inputId() || checkboxId"
+  [checked]="checked()"
+  [disabled]="isDisabled()"
+  (change)="onToggle($event.checked)"
+>
+  @if (label()) {
+    {{ label() }}
+  }
+  <ng-content />
+</mat-checkbox>

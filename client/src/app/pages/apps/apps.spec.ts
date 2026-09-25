@@ -96,9 +96,10 @@ describe('Apps', () => {
     await fixture.whenStable();
     const text = fixture.nativeElement.textContent as string;
     expect(fixture.nativeElement.querySelector('#app-compose')).toBeNull();
+    const buttons = [...fixture.nativeElement.querySelectorAll('button')].map((button) => button.textContent ?? '');
     expect(text).not.toContain('Edit');
     expect(text).not.toContain('Remove');
-    expect(text).not.toContain('Deploy');
+    expect(buttons.some((label) => label.includes('Deploy'))).toBe(false);
     expect(text).not.toContain('Stop');
     expect(text).not.toContain('Rollback');
     expect(text).not.toContain('Secrets');
@@ -160,7 +161,7 @@ describe('Apps', () => {
     TestBed.inject(PermissionService).setPermissions(['apps.write', 'platform.settings.manage']);
     fixture.detectChanges();
     await fixture.whenStable();
-    const box = fixture.nativeElement.querySelector('#app-database') as HTMLInputElement;
+    const box = fixture.nativeElement.querySelector('#app-database-input') as HTMLInputElement;
     expect(box).not.toBeNull();
     expect(box.checked).toBe(false);
     expect(fixture.nativeElement.textContent).toContain('app host');
@@ -237,6 +238,7 @@ describe('Apps', () => {
     fixture.componentInstance.status.set('ready');
     fixture.componentInstance.apps.set([app]);
     const pending = fixture.componentInstance.openSecrets(app);
+    await Promise.resolve();
     http.expectOne(`${environment.apiUrl}/secrets?teamId=team&environment=dev`).flush({
       secrets: [
         {
@@ -253,8 +255,8 @@ describe('Apps', () => {
     fixture.detectChanges();
 
     expect(fixture.nativeElement.textContent).toContain('DB_PASSWORD (env) → api, cron');
-    const api = fixture.nativeElement.querySelector('#secret-service-api') as HTMLInputElement;
-    const worker = fixture.nativeElement.querySelector('#secret-service-worker') as HTMLInputElement;
+    const api = fixture.nativeElement.querySelector('#secret-service-api-input') as HTMLInputElement;
+    const worker = fixture.nativeElement.querySelector('#secret-service-worker-input') as HTMLInputElement;
     expect(api.checked).toBe(false);
     expect(worker.checked).toBe(false);
 
@@ -298,11 +300,12 @@ describe('Apps', () => {
     fixture.componentInstance.status.set('ready');
     fixture.componentInstance.apps.set([app]);
     const pending = fixture.componentInstance.openSecrets(app);
+    await Promise.resolve();
     http.expectOne(`${environment.apiUrl}/secrets?teamId=team&environment=dev`).flush({ secrets: [] });
     await pending;
     fixture.detectChanges();
 
-    const box = fixture.nativeElement.querySelector('#secret-service-app') as HTMLInputElement;
+    const box = fixture.nativeElement.querySelector('#secret-service-app-input') as HTMLInputElement;
     expect(box.checked).toBe(true);
     expect(fixture.nativeElement.textContent).not.toContain('This application has no services to assign.');
   });
@@ -327,6 +330,7 @@ describe('Apps', () => {
     fixture.componentInstance.status.set('ready');
     fixture.componentInstance.apps.set([app]);
     const opened = fixture.componentInstance.openSecrets(app);
+    await Promise.resolve();
     http.expectOne(`${environment.apiUrl}/secrets?teamId=team&environment=dev`).flush({ secrets: [] });
     await opened;
     fixture.componentInstance.secretForm.setValue({
@@ -337,8 +341,10 @@ describe('Apps', () => {
     });
 
     await fixture.componentInstance.saveSecret();
+    fixture.detectChanges();
     http.expectNone(`${environment.apiUrl}/secrets`);
-    expect(TestBed.inject(FeedbackService).items()[0].text).toBe('Select at least one service for this secret.');
+    expect(fixture.nativeElement.textContent).toContain('Select at least one service for this secret.');
+    expect(TestBed.inject(FeedbackService).items()).toHaveLength(0);
   });
 
   it('prefills the edit form and sends name and host without team or environment', async () => {
@@ -368,7 +374,7 @@ describe('Apps', () => {
     ]);
     fixture.detectChanges();
 
-    fixture.componentInstance.openEdit(app);
+    await fixture.componentInstance.openEdit(app);
     fixture.detectChanges();
     const name = fixture.nativeElement.querySelector('#edit-app-name') as HTMLInputElement;
     const image = fixture.nativeElement.querySelector('#edit-app-image') as HTMLInputElement;
@@ -421,19 +427,24 @@ describe('Apps', () => {
       requiresApproval: false,
       allowDatabaseImages: false,
     };
-    fixture.componentInstance.openEdit(app);
+    fixture.componentInstance.status.set('ready');
+    fixture.componentInstance.apps.set([app]);
+    await fixture.componentInstance.openEdit(app);
+    fixture.detectChanges();
     fixture.componentInstance.editForm.controls.name.setValue('   ');
     await fixture.componentInstance.saveEdit();
+    fixture.detectChanges();
     http.expectNone(`${environment.apiUrl}/apps/${app.id}`);
-    expect(TestBed.inject(FeedbackService).items()[0].text).toBe('Enter a name and a Docker host.');
+    expect(TestBed.inject(FeedbackService).items()).toHaveLength(0);
+    expect(fixture.nativeElement.textContent).toContain('Enter a name.');
 
-    TestBed.inject(FeedbackService).clear();
     fixture.componentInstance.editForm.controls.name.setValue('welcome');
     fixture.componentInstance.editForm.controls.composeYaml.setValue('');
     fixture.componentInstance.editForm.controls.image.setValue('');
     await fixture.componentInstance.saveEdit();
+    fixture.detectChanges();
     http.expectNone(`${environment.apiUrl}/apps/${app.id}`);
-    expect(TestBed.inject(FeedbackService).items()[0].text).toBe('Enter an image or a compose file.');
+    expect(fixture.nativeElement.textContent).toContain('Enter an image or a compose file.');
 
     TestBed.inject(FeedbackService).clear();
     fixture.componentInstance.editForm.controls.composeYaml.setValue('services:\n  web:\n    image: nginx:1.27\n');

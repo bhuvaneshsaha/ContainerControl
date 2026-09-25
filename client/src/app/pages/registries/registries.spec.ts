@@ -23,8 +23,12 @@ describe('Registries', () => {
 
   it('offers Acr, Ecr, DockerHub, and Harbor', () => {
     fixture.detectChanges();
-    const options = [...fixture.nativeElement.querySelectorAll('#registry-kind option')].map((option: HTMLOptionElement) => option.value);
-    expect(options).toEqual(['Acr', 'Ecr', 'DockerHub', 'Harbor']);
+    expect(fixture.componentInstance.kindOptions.map((option) => option.label)).toEqual(['Acr', 'Ecr', 'DockerHub', 'Harbor']);
+    expect(fixture.nativeElement.querySelector('#registry-access-key')).toBeNull();
     expect(fixture.nativeElement.textContent).toContain('registry:2');
+    fixture.componentInstance.registryKind.set('Ecr');
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('#registry-access-key')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('#registry-secret-key')).not.toBeNull();
   });
 });

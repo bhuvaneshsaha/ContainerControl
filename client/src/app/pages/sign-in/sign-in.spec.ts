@@ -23,16 +23,22 @@ describe('SignIn', () => {
   it('asks for an email and password', () => {
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.querySelector('h1')?.textContent).toContain('Sign in');
-    expect(compiled.querySelector('label[for="email"]')?.textContent).toContain('Email');
-    expect(compiled.querySelector('label[for="password"]')?.textContent).toContain('Password');
+    expect(compiled.querySelector('#email')).not.toBeNull();
+    expect(compiled.querySelector('#password')).not.toBeNull();
+    expect(compiled.textContent).toContain('Email');
+    expect(compiled.textContent).toContain('Password');
   });
 
-  it('shows one sentence when the form is empty', async () => {
+  it('shows a field error for email and password when the form is empty', async () => {
     const button = fixture.nativeElement.querySelector('button') as HTMLButtonElement;
     button.click();
     fixture.detectChanges();
+    fixture.detectChanges();
     await fixture.whenStable();
-    expect(fixture.nativeElement.textContent).toContain('Enter an email and password.');
+    const text = fixture.nativeElement.textContent as string;
+    expect(text).toContain('Enter an email.');
+    expect(text).toContain('Enter a password.');
+    expect((fixture.nativeElement.querySelector('button') as HTMLButtonElement).textContent).toContain('Sign in');
   });
 
   it('opens applications after sign-in when the account can read them', async () => {
