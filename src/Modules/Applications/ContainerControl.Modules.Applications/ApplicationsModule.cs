@@ -1,5 +1,6 @@
 using ContainerControl.Modules.Applications.Persistence;
 using ContainerControl.Modules.Applications.Secrets;
+using ContainerControl.Modules.Applications.Templates;
 using ContainerControl.Modules.Applications.Workloads;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -33,6 +34,7 @@ public static class ApplicationsModule
         services.AddScoped<DevelopmentFileSecretStore>();
         services.AddScoped<ISecretStore, SelectingSecretStore>();
         services.AddScoped<WorkloadAdmin>();
+        services.AddScoped<TemplateAdmin>();
         services.AddScoped<IWorkloadStore>(provider => provider.GetRequiredService<WorkloadAdmin>());
         services.AddScoped<ISecretCatalog>(provider => provider.GetRequiredService<WorkloadAdmin>());
         return services;

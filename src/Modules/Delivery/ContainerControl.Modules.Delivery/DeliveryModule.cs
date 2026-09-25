@@ -1,3 +1,5 @@
+using ContainerControl.Modules.Applications.Templates;
+using ContainerControl.Modules.Delivery.Compose;
 using ContainerControl.Modules.Delivery.Persistence;
 using ContainerControl.Modules.Delivery.Runs;
 using Microsoft.EntityFrameworkCore;
@@ -27,6 +29,7 @@ public static class DeliveryModule
                 npgsql.MigrationsHistoryTable("__EFMigrationsHistory", SchemaName);
                 npgsql.MigrationsAssembly(typeof(DeliveryDbContext).Assembly.GetName().Name);
             }));
+        services.AddScoped<IComposeDocumentGate, ComposePolicyGate>();
         services.AddScoped<DeployLease>();
         services.AddScoped<DeployService>();
         return services;

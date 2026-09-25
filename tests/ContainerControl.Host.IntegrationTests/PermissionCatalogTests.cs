@@ -25,6 +25,7 @@ public class PermissionCatalogTests
             "registries.manage",
             "apps.read",
             "apps.write",
+            "apps.templates.manage",
             "secrets.read",
             "secrets.manage",
             "secrets.manage.prod",

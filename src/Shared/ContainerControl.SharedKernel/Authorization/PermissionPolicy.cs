@@ -34,3 +34,33 @@ public sealed class PermissionAuthorizationHandler : AuthorizationHandler<Permis
         return Task.CompletedTask;
     }
 }
+
+public sealed class AnyPermissionRequirement : IAuthorizationRequirement
+{
+    public AnyPermissionRequirement(IReadOnlyList<string> permissions)
+    {
+        if (permissions.Count == 0 || permissions.Any(string.IsNullOrWhiteSpace))
+        {
+            throw new ArgumentException("At least one permission code is required.", nameof(permissions));
+        }
+
+        Permissions = permissions;
+    }
+
+    public IReadOnlyList<string> Permissions { get; }
+}
+
+public sealed class AnyPermissionAuthorizationHandler : AuthorizationHandler<AnyPermissionRequirement>
+{
+    protected override Task HandleRequirementAsync(
+        AuthorizationHandlerContext context,
+        AnyPermissionRequirement requirement)
+    {
+        if (requirement.Permissions.Any(permission => context.User.HasClaim(PermissionPolicy.ClaimType, permission)))
+        {
+            context.Succeed(requirement);
+        }
+
+        return Task.CompletedTask;
+    }
+}

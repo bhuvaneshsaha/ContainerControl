@@ -109,6 +109,7 @@ public static class AccessModuleExtensions
         services.AddScoped<AuditQuery>();
         services.AddScoped<BreakGlassAdmin>();
         services.AddScoped<IAuthorizationHandler, BreakGlassAuthorizationHandler>();
+        services.AddScoped<IAuthorizationHandler, BreakGlassAnyPermissionHandler>();
         services.AddScoped<SignInService>();
         services.AddScoped<UserAdminService>();
         services.AddScoped<RoleAdminService>();

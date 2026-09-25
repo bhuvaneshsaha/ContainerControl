@@ -47,6 +47,8 @@ Rejected before any container is created:
 - database images, unless that application has `AllowDatabaseImages` set
 - a service hostname that is not a DNS name, or two services that claim the same public hostname
 
+A template stores a compose document only when this policy accepts it and the file contains no secret value. A `${SECRET}` or `$SECRET` placeholder is allowed. A private key, an `env_file`, a compose `secrets` entry, a URL password, or a literal value on a secret-like name is rejected. The rejection does not repeat the value, and the value is not written to PostgreSQL or the log. See [ADR 0017](adr/0017-application-templates.md).
+
 `AllowDatabaseImages` defaults to false. Existing applications stay false. There is no global switch that allows database images. `ComposePolicy` matches product names as whole `-` / `_` tokens in the image name and repository path (the registry host is ignored), so official tags and common vendor tags are rejected together (`postgresql`, `postgis`, `pgvector`, `timescaledb`, `mysql-server`, `mariadb-galera`, `mcr.microsoft.com/mssql/server`, `azure-sql-edge`, Oracle Database editions, and the other data-tier names in `ComposePolicy`). Oracle Linux and client images such as Instant Client are not database images.
 
 A caller with `apps.write` can create and update an application while the flag stays false, and can turn the flag off. Turning it on for that application also requires `platform.settings.manage`. On update, omitting the field leaves the stored value unchanged. Deploy then skips only the database-image check. Privileged mode, host networking, bind mounts, and the other rejections still apply. Changing the flag writes `apps.database-images.allowed` or `apps.database-images.blocked`.

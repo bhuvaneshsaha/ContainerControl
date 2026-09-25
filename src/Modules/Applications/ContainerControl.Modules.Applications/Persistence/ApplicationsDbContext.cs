@@ -1,4 +1,5 @@
 using ContainerControl.Modules.Applications.Secrets;
+using ContainerControl.Modules.Applications.Templates;
 using ContainerControl.Modules.Applications.Workloads;
 using ContainerControl.SharedKernel.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -19,6 +20,8 @@ public sealed class ApplicationsDbContext : DbContext
     public DbSet<SecretReference> Secrets => Set<SecretReference>();
 
     public DbSet<SecretServiceTarget> SecretServiceTargets => Set<SecretServiceTarget>();
+
+    public DbSet<AppTemplate> Templates => Set<AppTemplate>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -61,6 +64,16 @@ public sealed class ApplicationsDbContext : DbContext
             entity.ToTable("secret_service_targets");
             entity.HasKey(target => new { target.SecretId, target.ServiceName });
             entity.Property(target => target.ServiceName).HasMaxLength(63).IsRequired();
+        });
+        modelBuilder.Entity<AppTemplate>(entity =>
+        {
+            entity.ToTable("app_templates");
+            entity.HasKey(template => template.Id);
+            entity.Property(template => template.Name).HasMaxLength(TemplateAdmin.MaxNameLength).IsRequired();
+            entity.Property(template => template.NameKey).HasMaxLength(TemplateAdmin.MaxNameLength).IsRequired();
+            entity.Property(template => template.Description).HasMaxLength(TemplateAdmin.MaxDescriptionLength).IsRequired();
+            entity.Property(template => template.ComposeYaml).IsRequired();
+            entity.HasIndex(template => template.NameKey).IsUnique();
         });
     }
 }

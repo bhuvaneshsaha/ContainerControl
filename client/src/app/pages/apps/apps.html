@@ -181,6 +181,7 @@
         <app-select-field label="Team" inputId="app-team" formControlName="teamId" [options]="teamOptions()" [error]="fieldError(form.controls.teamId, { required: 'Select a team.' })" />
         <app-select-field label="Docker host" inputId="app-host" formControlName="hostId" [options]="hostOptions()" [error]="fieldError(form.controls.hostId, { required: 'Select a Docker host.' })" />
         <app-select-field label="Environment" inputId="app-environment" formControlName="environment" [options]="environmentOptions" />
+        <p><a class="text-neutral-800 underline" routerLink="/templates">Start from a template</a>.</p>
         <app-text-field label="Compose file" inputId="app-compose" [rows]="8" formControlName="composeYaml" [error]="fieldError(form.controls.composeYaml, { required: 'Enter a compose file.' })" />
         <app-text-field label="Internal port" inputId="app-port" inputMode="numeric" formControlName="internalPort" />
         <app-text-field label="Hostname" inputId="app-hostname" formControlName="hostname" />

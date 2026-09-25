@@ -2,6 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Component, ElementRef, inject, signal, viewChild } from '@angular/core';
 import { AbstractControl, FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
+import { RouterLink } from '@angular/router';
 import { HubConnection } from '@microsoft/signalr';
 import { firstValueFrom } from 'rxjs';
 
@@ -32,6 +33,7 @@ type InspectKind = 'secrets' | 'logs' | 'live' | 'stats';
   selector: 'app-apps',
   imports: [
     ReactiveFormsModule,
+    RouterLink,
     HasPermission,
     MatButtonModule,
     TextField,

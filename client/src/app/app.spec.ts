@@ -25,6 +25,7 @@ describe('App', () => {
     expect(compiled.querySelector('.product')?.textContent).toContain('ContainerControl');
     expect(compiled.textContent).toContain('My access');
     expect(compiled.textContent).toContain('Applications');
+    expect(compiled.textContent).toContain('Templates');
     expect(compiled.textContent).not.toContain('Hosts');
     expect(compiled.querySelector('main')).not.toBeNull();
   });

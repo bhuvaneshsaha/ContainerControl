@@ -53,11 +53,13 @@ public sealed class DevelopmentAccessSeeder
             AdministratorRoleName,
             "Development sample role with every catalog permission.",
             PermissionCatalog.All.Select(permission => permission.Code).ToArray(),
+            addMissingPermissions: true,
             cancellationToken);
         var developerRole = await EnsureRoleAsync(
             DeveloperRoleName,
             "Development sample role for application work. It cannot manage Docker hosts.",
             DeveloperPermissionCodes,
+            addMissingPermissions: false,
             cancellationToken);
 
         var platformTeam = await EnsureTeamAsync("Platform", cancellationToken);
@@ -84,6 +86,7 @@ public sealed class DevelopmentAccessSeeder
         string name,
         string description,
         IReadOnlyList<string> permissionCodes,
+        bool addMissingPermissions,
         CancellationToken cancellationToken)
     {
         var role = await _db.PermissionRoles
@@ -91,6 +94,33 @@ public sealed class DevelopmentAccessSeeder
             .SingleOrDefaultAsync(item => item.Name == name, cancellationToken);
         if (role is not null)
         {
+            if (addMissingPermissions)
+            {
+                var existing = role.Permissions
+                    .Select(link => link.PermissionCode)
+                    .ToHashSet(StringComparer.Ordinal);
+                var added = false;
+                foreach (var code in permissionCodes.Distinct(StringComparer.Ordinal))
+                {
+                    if (!existing.Add(code))
+                    {
+                        continue;
+                    }
+
+                    role.Permissions.Add(new PermissionRolePermission
+                    {
+                        RoleId = role.Id,
+                        PermissionCode = code
+                    });
+                    added = true;
+                }
+
+                if (added)
+                {
+                    await _db.SaveChangesAsync(cancellationToken);
+                }
+            }
+
             return role;
         }
 
