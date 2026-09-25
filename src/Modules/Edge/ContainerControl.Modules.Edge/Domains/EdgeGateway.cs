@@ -88,13 +88,16 @@ public sealed class EdgeGateway : IEdgeGateway
             "--entrypoints.web.address=:80",
             "--entrypoints.websecure.address=:443"
         };
-        var email = _configuration["Edge:AcmeEmail"];
+        var email = AcmeEmail();
         if (!string.IsNullOrWhiteSpace(email))
         {
             command.Add("--certificatesresolvers.le.acme.email=" + email);
             command.Add("--certificatesresolvers.le.acme.storage=/letsencrypt/acme.json");
             command.Add("--certificatesresolvers.le.acme.httpchallenge=true");
             command.Add("--certificatesresolvers.le.acme.httpchallenge.entrypoint=web");
+            command.Add("--entrypoints.web.http.redirections.entrypoint.to=websecure");
+            command.Add("--entrypoints.web.http.redirections.entrypoint.scheme=https");
+            command.Add("--entrypoints.web.http.redirections.entrypoint.permanent=true");
         }
 
         var id = await _engine.CreateContainerAsync(endpoint, new ContainerPlan(
@@ -124,15 +127,27 @@ public sealed class EdgeGateway : IEdgeGateway
             throw new ArgumentException("The hostname is not a DNS name.", nameof(hostname));
         }
 
-        return new Dictionary<string, string>
+        var router = "traefik.http.routers." + routerName;
+        var labels = new Dictionary<string, string>
         {
             ["traefik.enable"] = "true",
             ["traefik.docker.network"] = EdgeNetworkName,
-            ["traefik.http.routers." + routerName + ".rule"] = rule,
-            ["traefik.http.routers." + routerName + ".entrypoints"] = "web",
+            [router + ".rule"] = rule,
+            [router + ".entrypoints"] = AcmeConfigured() ? "websecure" : "web",
             ["traefik.http.services." + routerName + ".loadbalancer.server.port"] = port.ToString()
         };
+        if (AcmeConfigured())
+        {
+            labels[router + ".tls"] = "true";
+            labels[router + ".tls.certresolver"] = "le";
+        }
+
+        return labels;
     }
+
+    private bool AcmeConfigured() => !string.IsNullOrWhiteSpace(AcmeEmail());
+
+    private string? AcmeEmail() => _configuration is null ? null : _configuration["Edge:AcmeEmail"];
 
     private static string SocketPath(string endpoint)
     {

@@ -64,7 +64,7 @@ A `tcp://` host outside Development is stored and connected only when the client
 
 Traefik on the Docker host keeps the read-only local socket mount from ADR 0004. Tenant services cannot mount that socket; the compose denylist stays enforced. A socket proxy and the file provider are later work. Until they land, Traefik's hold on the host socket remains the accepted high-value residual above.
 
-PLAT-01 and PLAT-02 are the implementation stories that follow this record. PLAT-04 is documentation-complete for v1.
+PLAT-01 is implemented: `LabelsFor` stamps the TLS labels, and prepare adds the HTTP redirect when it creates Traefik. An existing `cc-traefik` container is left as it is. PLAT-02 is the implementation story that follows. PLAT-04 is documentation-complete for v1.
 
 ## Non-goals
 - DNS writes.
