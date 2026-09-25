@@ -19,7 +19,7 @@ Authorization checks a permission code. It does not check a role name. A break-g
 
 Application routes also require team membership, except `POST /apps/{id}/approve`. That call requires `deploy.approve` and does not require membership. `prod`, and any application that opted in, stays `pending-approval` until that call.
 
-The API reaches Docker through the Engine API client. Host choice responses omit the endpoint. Capacity responses omit it too. Prepare, ping, and capacity reads return a fixed error when the Engine cannot be reached. They do not return the Engine body.
+The API reaches Docker through the Engine API client. Host choice responses omit the endpoint. Capacity responses omit it too. Prepare, ping, and capacity reads return a fixed error when the Engine cannot be reached. They do not return the Engine body. Registration and the Engine client accept only `unix`, `npipe`, and `tcp` endpoints. Any other scheme is rejected with a fixed message that does not include the supplied address. See [ADR 0012](adr/0012-engine-endpoint-scheme-allow-list.md).
 
 Compose is checked before any Engine call. The policy rejects `privileged`, host networking, host pid or ipc, `cap_add`, devices, `build`, bind mounts, the Docker socket, and database images. Deploy starts dependencies first and waits for a compose healthcheck, capped at five minutes. When the team has a quota, each service must declare CPU, memory, and storage limits, and the sum must fit.
 

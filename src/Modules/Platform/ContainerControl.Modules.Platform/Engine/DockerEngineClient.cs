@@ -367,11 +367,7 @@ public sealed class DockerEngineClient : IDockerEngine
 
     private static DockerClient Connect(DockerEndpoint endpoint)
     {
-        if (!Uri.TryCreate(endpoint.Address, UriKind.Absolute, out var uri))
-        {
-            throw new DockerEngineException("The Docker host endpoint is not a valid URI.");
-        }
-
+        var uri = EngineConnectUri.Parse(endpoint.Address);
         return new DockerClientConfiguration(uri).CreateClient(new System.Version(1, 44), null!);
     }
 
