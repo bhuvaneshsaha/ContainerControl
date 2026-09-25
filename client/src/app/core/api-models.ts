@@ -87,6 +87,8 @@ export interface AppResponse {
   requiresApproval: boolean;
   allowDatabaseImages: boolean;
   composeYaml?: string | null;
+  internalPort?: number | null;
+  command?: string[] | null;
 }
 
 export interface AppListResponse {

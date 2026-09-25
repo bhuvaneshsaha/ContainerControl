@@ -1,4 +1,6 @@
+using System.Net;
 using System.Text.Json;
+using Docker.DotNet;
 using Microsoft.AspNetCore.Http;
 using ContainerControl.Modules.Access.Application.Teams;
 using ContainerControl.Modules.Applications.Secrets;
@@ -180,6 +182,56 @@ public sealed class DeployService
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<DeployOutcome> RemoveAsync(Guid applicationId, CancellationToken cancellationToken)
+    {
+        var app = await _apps.FindAsync(applicationId, cancellationToken);
+        if (app is null || _currentUser.UserId is null || !await _teams.IsMemberAsync(_currentUser.UserId.Value, app.TeamId, cancellationToken))
+        {
+            return DeployOutcome.NotFound();
+        }
+
+        if (await _lease.IsContendedAsync(app.Id, app.Environment, cancellationToken))
+        {
+            return DeployOutcome.Fail(StatusCodes.Status409Conflict, DeployLease.ContendedMessage);
+        }
+
+        var host = await _hosts.FindAsync(app.HostId, cancellationToken);
+        if (host is null)
+        {
+            _logger.LogWarning(
+                "Application {ApplicationId} has no Docker host record. The application row will still be removed.",
+                app.Id);
+        }
+        else
+        {
+            try
+            {
+                await RemoveRuntimeAsync(host.Endpoint, app.Id, cancellationToken);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                _logger.LogError(
+                    "Removing containers for {ApplicationId} failed. {ExceptionType}",
+                    app.Id,
+                    exception.GetType().Name);
+                return DeployOutcome.Fail(
+                    StatusCodes.Status502BadGateway,
+                    "The Docker host could not remove the application's containers.");
+            }
+        }
+
+        await _db.Deployments.Where(item => item.ApplicationId == app.Id).ExecuteDeleteAsync(cancellationToken);
+        await _db.Leases.Where(item => item.ApplicationId == app.Id).ExecuteDeleteAsync(cancellationToken);
+        var deleted = await _apps.DeleteAsync(app.Id, cancellationToken);
+        if (!deleted)
+        {
+            return DeployOutcome.NotFound();
+        }
+
+        _logger.LogInformation("Removed application {ApplicationId}.", app.Id);
+        return DeployOutcome.Ok("deleted");
+    }
+
     private async Task<DeployOutcome> DeployHeldAsync(Guid applicationId, bool approved, CancellationToken cancellationToken)
     {
         var app = await _apps.FindAsync(applicationId, cancellationToken);
@@ -295,7 +347,8 @@ public sealed class DeployService
         }
 
         var endpoint = new DockerEndpoint(endpointAddress);
-        var network = "cc-app-" + app.Id.ToString("N");
+        var network = AppNetwork(app.Id);
+        var project = ComposeProjectName.Resolve(app.ComposeYaml, app.Name, app.Id);
         await _engine.EnsureNetworkAsync(endpoint, network, cancellationToken);
         if (anyExposed)
         {
@@ -341,6 +394,7 @@ public sealed class DeployService
                 ["cc.application"] = app.Id.ToString(),
                 ["cc.service"] = service.Name
             };
+            ComposeProjectName.Stamp(labels, project, service.Name);
             var extra = new List<string>();
             var routeHost = ComposePolicy.RouteHostname(service, publicHost);
             if (routeHost is not null && service.Port is int port)
@@ -476,6 +530,36 @@ public sealed class DeployService
 
         return JsonSerializer.Deserialize<List<string>>(json);
     }
+
+    private async Task RemoveRuntimeAsync(string endpointAddress, Guid applicationId, CancellationToken cancellationToken)
+    {
+        var endpoint = new DockerEndpoint(endpointAddress);
+        var containers = await _engine.ListByLabelAsync(endpoint, "cc.application=" + applicationId, cancellationToken);
+        foreach (var container in containers)
+        {
+            try
+            {
+                await _engine.RemoveContainerAsync(endpoint, container.Id, cancellationToken);
+            }
+            catch (DockerApiException exception) when (exception.StatusCode == HttpStatusCode.NotFound)
+            {
+            }
+        }
+
+        try
+        {
+            await _engine.RemoveNetworkAsync(endpoint, AppNetwork(applicationId), cancellationToken);
+        }
+        catch (DockerApiException exception) when (exception.StatusCode is HttpStatusCode.Conflict or HttpStatusCode.Forbidden)
+        {
+            _logger.LogWarning(
+                "Application network {Network} for {ApplicationId} was not removed.",
+                AppNetwork(applicationId),
+                applicationId);
+        }
+    }
+
+    private static string AppNetwork(Guid appId) => "cc-app-" + appId.ToString("N");
 
     private static string ContainerName(Guid appId, string service) =>
         "cc" + appId.ToString("N")[..12] + "-" + service;

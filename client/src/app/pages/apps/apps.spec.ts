@@ -96,6 +96,8 @@ describe('Apps', () => {
     await fixture.whenStable();
     const text = fixture.nativeElement.textContent as string;
     expect(fixture.nativeElement.querySelector('#app-compose')).toBeNull();
+    expect(text).not.toContain('Edit');
+    expect(text).not.toContain('Remove');
     expect(text).not.toContain('Deploy');
     expect(text).not.toContain('Stop');
     expect(text).not.toContain('Rollback');
@@ -337,5 +339,169 @@ describe('Apps', () => {
     await fixture.componentInstance.saveSecret();
     http.expectNone(`${environment.apiUrl}/secrets`);
     expect(TestBed.inject(FeedbackService).items()[0].text).toBe('Select at least one service for this secret.');
+  });
+
+  it('prefills the edit form and sends name and host without team or environment', async () => {
+    const http = TestBed.inject(HttpTestingController);
+    const app: AppResponse = {
+      id: '97f94c8a-3d8e-49ee-9397-2a358eb9a636',
+      teamId: 'team',
+      hostId: 'host',
+      name: 'welcome',
+      environment: 'dev',
+      image: 'nginx:1.27',
+      composeYaml: null,
+      command: ['nginx', '-g', 'daemon off;'],
+      internalPort: 80,
+      status: 'registered',
+      hostname: 'web.apps.localhost',
+      exposed: true,
+      requiresApproval: false,
+      allowDatabaseImages: false,
+    };
+    fixture.componentInstance.status.set('ready');
+    fixture.componentInstance.apps.set([app]);
+    fixture.componentInstance.teams.set([{ id: 'team', name: 'Platform' }]);
+    fixture.componentInstance.hosts.set([
+      { id: 'host', name: 'local' },
+      { id: 'host-2', name: 'other' },
+    ]);
+    fixture.detectChanges();
+
+    fixture.componentInstance.openEdit(app);
+    fixture.detectChanges();
+    const name = fixture.nativeElement.querySelector('#edit-app-name') as HTMLInputElement;
+    const image = fixture.nativeElement.querySelector('#edit-app-image') as HTMLInputElement;
+    const port = fixture.nativeElement.querySelector('#edit-app-port') as HTMLInputElement;
+    expect(name.value).toBe('welcome');
+    expect(image.value).toBe('nginx:1.27');
+    expect(port.value).toBe('80');
+    expect(fixture.nativeElement.querySelector('#edit-app-team').textContent).toContain('Platform');
+    expect(fixture.nativeElement.querySelector('#edit-app-environment').textContent).toContain('dev');
+    expect(fixture.nativeElement.querySelector('#edit-app-environment-input')).toBeNull();
+
+    fixture.componentInstance.editForm.controls.name.setValue('welcome-renamed');
+    fixture.componentInstance.editForm.controls.hostId.setValue('host-2');
+    const pending = fixture.componentInstance.saveEdit();
+    const request = http.expectOne(`${environment.apiUrl}/apps/${app.id}`);
+    expect(request.request.method).toBe('PUT');
+    expect(request.request.body.name).toBe('welcome-renamed');
+    expect(request.request.body.hostId).toBe('host-2');
+    expect(request.request.body.teamId).toBeUndefined();
+    expect(request.request.body.environment).toBeUndefined();
+    expect(request.request.body.allowDatabaseImages).toBeUndefined();
+    expect(request.request.body.command).toEqual(['nginx', '-g', 'daemon off;']);
+    expect(request.request.body.internalPort).toBe(80);
+    request.flush('', { status: 204, statusText: 'No Content' });
+    http.expectOne(`${environment.apiUrl}/apps`).flush({
+      apps: [{ ...app, name: 'welcome-renamed', hostId: 'host-2' }],
+    });
+    await pending;
+
+    expect(fixture.componentInstance.editing()).toBeNull();
+    expect(fixture.componentInstance.apps()[0].name).toBe('welcome-renamed');
+    expect(TestBed.inject(FeedbackService).items()[0].kind).toBe('status');
+    expect(TestBed.inject(FeedbackService).items()[0].text).toBe('welcome-renamed was saved.');
+  });
+
+  it('shows the API reason when an edit is rejected', async () => {
+    const http = TestBed.inject(HttpTestingController);
+    const app: AppResponse = {
+      id: '97f94c8a-3d8e-49ee-9397-2a358eb9a636',
+      teamId: 'team',
+      hostId: 'host',
+      name: 'welcome',
+      environment: 'dev',
+      image: null,
+      composeYaml: 'services:\n  web:\n    image: nginx:1.27\n',
+      status: 'registered',
+      hostname: null,
+      exposed: false,
+      requiresApproval: false,
+      allowDatabaseImages: false,
+    };
+    fixture.componentInstance.openEdit(app);
+    fixture.componentInstance.editForm.controls.name.setValue('   ');
+    await fixture.componentInstance.saveEdit();
+    http.expectNone(`${environment.apiUrl}/apps/${app.id}`);
+    expect(TestBed.inject(FeedbackService).items()[0].text).toBe('Enter a name and a Docker host.');
+
+    TestBed.inject(FeedbackService).clear();
+    fixture.componentInstance.editForm.controls.name.setValue('welcome');
+    fixture.componentInstance.editForm.controls.composeYaml.setValue('');
+    fixture.componentInstance.editForm.controls.image.setValue('');
+    await fixture.componentInstance.saveEdit();
+    http.expectNone(`${environment.apiUrl}/apps/${app.id}`);
+    expect(TestBed.inject(FeedbackService).items()[0].text).toBe('Enter an image or a compose file.');
+
+    TestBed.inject(FeedbackService).clear();
+    fixture.componentInstance.editForm.controls.composeYaml.setValue('services:\n  web:\n    image: nginx:1.27\n');
+    const pending = fixture.componentInstance.saveEdit();
+    http.expectOne(`${environment.apiUrl}/apps/${app.id}`).flush(
+      { errors: { app: ['An application with that name already exists in this team and environment.'] } },
+      { status: 400, statusText: 'Bad Request' },
+    );
+    await pending;
+    expect(fixture.componentInstance.editing()?.id).toBe(app.id);
+    expect(TestBed.inject(FeedbackService).items()[0].text).toBe(
+      'An application with that name already exists in this team and environment.',
+    );
+  });
+
+  it('does not remove an application until the operator confirms', async () => {
+    const http = TestBed.inject(HttpTestingController);
+    const app: AppResponse = {
+      id: '97f94c8a-3d8e-49ee-9397-2a358eb9a636',
+      teamId: 'team',
+      hostId: 'host',
+      name: 'welcome',
+      environment: 'dev',
+      image: null,
+      status: 'registered',
+      hostname: null,
+      exposed: false,
+      requiresApproval: false,
+      allowDatabaseImages: false,
+    };
+
+    const pending = fixture.componentInstance.remove(app);
+    TestBed.inject(ConfirmService).answer(false);
+    await pending;
+
+    http.expectNone(`${environment.apiUrl}/apps/${app.id}`);
+  });
+
+  it('removes the application row after delete succeeds', async () => {
+    const http = TestBed.inject(HttpTestingController);
+    const app: AppResponse = {
+      id: '97f94c8a-3d8e-49ee-9397-2a358eb9a636',
+      teamId: 'team',
+      hostId: 'host',
+      name: 'welcome',
+      environment: 'dev',
+      image: null,
+      status: 'running',
+      hostname: null,
+      exposed: false,
+      requiresApproval: false,
+      allowDatabaseImages: false,
+    };
+    fixture.componentInstance.status.set('ready');
+    fixture.componentInstance.apps.set([app]);
+    fixture.componentInstance.editing.set(app);
+    fixture.detectChanges();
+
+    const pending = fixture.componentInstance.remove(app);
+    TestBed.inject(ConfirmService).answer(true);
+    await Promise.resolve();
+    const request = http.expectOne(`${environment.apiUrl}/apps/${app.id}`);
+    expect(request.request.method).toBe('DELETE');
+    request.flush('', { status: 204, statusText: 'No Content' });
+    http.expectOne(`${environment.apiUrl}/apps`).flush({ apps: [] });
+    await pending;
+
+    expect(fixture.componentInstance.apps()).toEqual([]);
+    expect(fixture.componentInstance.editing()).toBeNull();
+    expect(TestBed.inject(FeedbackService).items()[0].text).toBe('welcome was removed.');
   });
 });

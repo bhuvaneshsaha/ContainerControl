@@ -33,7 +33,7 @@ A new product capability needs a new code in `PermissionCatalog` and a check at 
 | `runtime.stats.read` | Runtime |
 | `runtime.control` | Runtime |
 
-`GET /permissions` returns the catalog for a caller with `access.roles.manage`. `GET /me/permissions` returns the signed-in user's codes. Role create, update, and delete use `access.roles.manage`. User create, disable, and role assignment use `access.users.manage`. `deploy.approve` accepts a deploy that is waiting. The Applications page shows that action only for that code. `access.audit.read` calls `GET /access/audit`. `access.roles.manage` edits roles from the catalog checkboxes on the Access page. `access.breakglass.grant` calls `POST /access/break-glass`. That writes an audit row and does not open a shell or the Docker socket.
+`GET /permissions` returns the catalog for a caller with `access.roles.manage`. `GET /me/permissions` returns the signed-in user's codes. Role create, update, and delete use `access.roles.manage`. User create, disable, and role assignment use `access.users.manage`. `apps.write` creates, updates, and removes applications. The Applications page shows Edit and Remove only for that code. `deploy.approve` accepts a deploy that is waiting. The Applications page shows Approve only for that code. `access.audit.read` calls `GET /access/audit`. `access.roles.manage` edits roles from the catalog checkboxes on the Access page. `access.breakglass.grant` calls `POST /access/break-glass`. That writes an audit row and does not open a shell or the Docker socket.
 
 Development sample roles, created only when `ASPNETCORE_ENVIRONMENT` is `Development`:
 

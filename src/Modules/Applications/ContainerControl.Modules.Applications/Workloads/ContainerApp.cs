@@ -64,4 +64,6 @@ public interface IWorkloadStore
     Task SetStatusAsync(Guid id, string status, CancellationToken cancellationToken);
 
     Task ReplaceDesiredAsync(Guid id, DesiredState desired, CancellationToken cancellationToken);
+
+    Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken);
 }
