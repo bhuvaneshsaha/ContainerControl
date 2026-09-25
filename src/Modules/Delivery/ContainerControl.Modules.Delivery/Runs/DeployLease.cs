@@ -83,6 +83,14 @@ public sealed class DeployLease
         }
     }
 
+    public async Task<bool> IsContendedAsync(Guid applicationId, string environment, CancellationToken cancellationToken)
+    {
+        var lease = await _db.Leases.AsNoTracking().SingleOrDefaultAsync(
+            item => item.ApplicationId == applicationId && item.Environment == environment,
+            cancellationToken);
+        return lease is not null && IsHeld(lease);
+    }
+
     public async Task ReleaseAsync(Guid applicationId, string environment, Guid ownerId, CancellationToken cancellationToken)
     {
         var lease = await _db.Leases.SingleOrDefaultAsync(

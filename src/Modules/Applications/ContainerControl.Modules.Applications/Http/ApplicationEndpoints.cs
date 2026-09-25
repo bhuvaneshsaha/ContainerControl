@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text.Json;
 using ContainerControl.Modules.Access.Domain.Permissions;
 using ContainerControl.Modules.Applications.Secrets;
 using ContainerControl.Modules.Applications.Workloads;
@@ -22,7 +23,8 @@ public sealed record AppResponse(
     bool Exposed,
     bool RequiresApproval,
     bool AllowDatabaseImages,
-    string Status);
+    string Status,
+    IReadOnlyList<string>? Command);
 
 public sealed record AppListResponse(IReadOnlyList<AppResponse> Apps);
 
@@ -137,6 +139,8 @@ public static class ApplicationEndpoints
 
                 var result = await apps.UpdateAsync(
                     appId,
+                    request?.Name,
+                    request?.HostId,
                     request?.Image,
                     request?.Command,
                     request?.ComposeYaml,
@@ -231,7 +235,39 @@ public static class ApplicationEndpoints
             statusCode: StatusCodes.Status403Forbidden);
 
     private static AppResponse ToResponse(ContainerApp app) =>
-        new(app.Id, app.TeamId, app.HostId, app.Name, app.Environment, app.Image, app.ComposeYaml, app.InternalPort, app.Hostname, app.Exposed, app.RequiresApproval, app.AllowDatabaseImages, app.Status);
+        new(
+            app.Id,
+            app.TeamId,
+            app.HostId,
+            app.Name,
+            app.Environment,
+            app.Image,
+            app.ComposeYaml,
+            app.InternalPort,
+            app.Hostname,
+            app.Exposed,
+            app.RequiresApproval,
+            app.AllowDatabaseImages,
+            app.Status,
+            ReadCommand(app.CommandJson));
+
+    private static IReadOnlyList<string>? ReadCommand(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return null;
+        }
+
+        try
+        {
+            var command = JsonSerializer.Deserialize<List<string>>(json);
+            return command is null || command.Count == 0 ? null : command;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
 
     private static SecretResponse ToSecret(SecretReference secret) =>
         new(secret.Id, secret.Name, secret.Environment, secret.InjectionMode, secret.Path, secret.OrderedServiceNames());

@@ -42,6 +42,19 @@ public static class DeliveryEndpoints
         MapPower(endpoints, "stop");
         MapPower(endpoints, "restart");
 
+        endpoints.MapDelete("/apps/{appId:guid}", async (Guid appId, DeployService deploy, CancellationToken cancellationToken) =>
+            {
+                var outcome = await deploy.RemoveAsync(appId, cancellationToken);
+                return outcome.Succeeded ? Results.NoContent() : ToResult(outcome);
+            })
+            .RequirePermission(PermissionCatalog.AppsWrite)
+            .WithName("DeleteApp")
+            .WithTags("Delivery")
+            .Produces(StatusCodes.Status204NoContent)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .ProducesProblem(StatusCodes.Status502BadGateway);
+
         endpoints.MapGet("/apps/{appId:guid}/deployments", async (Guid appId, DeployService deploy, CancellationToken cancellationToken) =>
             {
                 var history = await deploy.HistoryAsync(appId, cancellationToken);

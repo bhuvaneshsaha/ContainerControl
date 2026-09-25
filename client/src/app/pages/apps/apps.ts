@@ -56,6 +56,19 @@ export class Apps {
     requireApproval: new FormControl(false, { nonNullable: true }),
     allowDatabaseImages: new FormControl(false, { nonNullable: true }),
   });
+  readonly editing = signal<AppResponse | null>(null);
+  readonly editForm = new FormGroup({
+    name: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
+    hostId: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
+    image: new FormControl('', { nonNullable: true }),
+    composeYaml: new FormControl('', { nonNullable: true }),
+    command: new FormControl('', { nonNullable: true }),
+    internalPort: new FormControl('', { nonNullable: true }),
+    hostname: new FormControl('', { nonNullable: true }),
+    exposed: new FormControl(false, { nonNullable: true }),
+    requireApproval: new FormControl(false, { nonNullable: true }),
+    allowDatabaseImages: new FormControl(false, { nonNullable: true }),
+  });
 
   constructor() {
     void this.load();
@@ -94,6 +107,19 @@ export class Apps {
     }
   }
 
+  private async refreshApps(): Promise<void> {
+    const response = await firstValueFrom(this.http.get<AppListResponse>(`${environment.apiUrl}/apps`));
+    this.apps.set(response.apps);
+    const selected = this.selected();
+    if (selected) {
+      const next = response.apps.find((item) => item.id === selected.id) ?? null;
+      this.selected.set(next);
+      if (!next) {
+        this.secrets.set([]);
+      }
+    }
+  }
+
   async create(): Promise<void> {
     this.feedback.clear();
     if (this.form.invalid) {
@@ -119,6 +145,144 @@ export class Apps {
         await this.load();
       } catch (error) {
         this.feedback.error(problemMessage(error, 'The application could not be saved.'));
+      }
+    });
+  }
+
+  teamName(app: AppResponse): string {
+    return this.teams().find((team) => team.id === app.teamId)?.name ?? 'Unknown team';
+  }
+
+  hostKnown(hostId: string): boolean {
+    return this.hosts().some((host) => host.id === hostId);
+  }
+
+  openEdit(app: AppResponse): void {
+    this.editing.set(app);
+    this.editForm.controls.requireApproval.enable();
+    this.editForm.setValue({
+      name: app.name,
+      hostId: app.hostId,
+      image: app.image ?? '',
+      composeYaml: app.composeYaml ?? '',
+      command: (app.command ?? []).join('\n'),
+      internalPort: app.internalPort == null ? '' : String(app.internalPort),
+      hostname: app.hostname ?? '',
+      exposed: app.exposed,
+      requireApproval: app.environment === 'prod' || app.requiresApproval,
+      allowDatabaseImages: app.allowDatabaseImages,
+    });
+    if (app.environment === 'prod') {
+      this.editForm.controls.requireApproval.disable();
+    }
+
+    this.feedback.clear();
+  }
+
+  cancelEdit(): void {
+    this.editing.set(null);
+  }
+
+  async saveEdit(): Promise<void> {
+    const app = this.editing();
+    this.feedback.clear();
+    if (!app || this.editForm.invalid) {
+      this.editForm.markAllAsTouched();
+      this.feedback.error('Enter a name and a Docker host.');
+      return;
+    }
+
+    const value = this.editForm.getRawValue();
+    if (!value.name.trim() || !value.hostId) {
+      this.editForm.markAllAsTouched();
+      this.feedback.error('Enter a name and a Docker host.');
+      return;
+    }
+
+    const image = value.image.trim();
+    const composeYaml = value.composeYaml.trim();
+    if (!image && !composeYaml) {
+      this.feedback.error('Enter an image or a compose file.');
+      return;
+    }
+
+    const body: {
+      name: string;
+      hostId: string;
+      image: string | null;
+      composeYaml: string | null;
+      command: string[] | null;
+      internalPort: number | null;
+      hostname: string | null;
+      exposed: boolean;
+      requiresApproval: boolean;
+      allowDatabaseImages?: boolean;
+    } = {
+      name: value.name.trim(),
+      hostId: value.hostId,
+      image: image || null,
+      composeYaml: composeYaml || null,
+      command: commandLines(value.command),
+      internalPort: value.internalPort ? Number(value.internalPort) : null,
+      hostname: value.hostname.trim() || null,
+      exposed: value.exposed,
+      requiresApproval: app.environment === 'prod' || value.requireApproval,
+    };
+    if (this.permissions.hasPermission('platform.settings.manage')) {
+      body.allowDatabaseImages = value.allowDatabaseImages;
+    }
+
+    await runBusy(this.busy, 'edit', async () => {
+      try {
+        await firstValueFrom(this.http.put(`${environment.apiUrl}/apps/${app.id}`, body));
+        this.editing.set(null);
+        this.feedback.success(`${body.name} was saved.`);
+        try {
+          await this.refreshApps();
+        } catch (error) {
+          this.feedback.error(problemMessage(error, 'The application was saved, but the list could not be refreshed.'));
+        }
+      } catch (error) {
+        this.feedback.error(problemMessage(error, 'The application could not be saved.'));
+      }
+    });
+  }
+
+  async remove(app: AppResponse): Promise<void> {
+    const confirmed = await this.confirm.ask({
+      title: `Remove ${app.name}?`,
+      body: `This deletes ${app.name} and removes its containers from the Docker host. Deploy history for this application is removed.`,
+      confirmLabel: 'Remove application',
+      irreversible: true,
+    });
+    if (!confirmed) {
+      return;
+    }
+
+    await runBusy(this.busy, `remove:${app.id}`, async () => {
+      this.feedback.clear();
+      try {
+        await firstValueFrom(this.http.delete(`${environment.apiUrl}/apps/${app.id}`));
+      } catch (error) {
+        this.feedback.error(problemMessage(error, 'The application could not be removed.'));
+        return;
+      }
+
+      if (this.editing()?.id === app.id) {
+        this.editing.set(null);
+      }
+
+      if (this.selected()?.id === app.id) {
+        this.selected.set(null);
+        this.secrets.set([]);
+      }
+
+      this.apps.update((items) => items.filter((item) => item.id !== app.id));
+      this.feedback.success(`${app.name} was removed.`);
+      try {
+        await this.refreshApps();
+      } catch (error) {
+        this.feedback.error(problemMessage(error, 'The application was removed, but the list could not be refreshed.'));
       }
     });
   }
@@ -323,6 +487,14 @@ export class Apps {
       }
     });
   }
+}
+
+function commandLines(value: string): string[] | null {
+  const lines = value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  return lines.length === 0 ? null : lines;
 }
 
 function actionResult(name: string, action: AppAction): string {

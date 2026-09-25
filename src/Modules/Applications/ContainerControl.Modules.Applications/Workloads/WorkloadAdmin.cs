@@ -7,6 +7,7 @@ using ContainerControl.SharedKernel.CurrentUser;
 using ContainerControl.SharedKernel.Hostnames;
 using ContainerControl.SharedKernel.Time;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace ContainerControl.Modules.Applications.Workloads;
 
@@ -154,6 +155,8 @@ public sealed class WorkloadAdmin : IWorkloadStore, ISecretCatalog
 
     public async Task<(bool Ok, string? Error)> UpdateAsync(
         Guid id,
+        string? name,
+        Guid? hostId,
         string? image,
         IReadOnlyList<string>? command,
         string? composeYaml,
@@ -168,6 +171,27 @@ public sealed class WorkloadAdmin : IWorkloadStore, ISecretCatalog
         if (app is null || !await CanSeeAsync(app.TeamId, cancellationToken))
         {
             return (false, "not-found");
+        }
+
+        if (name is not null)
+        {
+            var trimmed = name.Trim();
+            if (trimmed.Length is 0 or > 200)
+            {
+                return (false, "Enter an application name of 200 characters or fewer.");
+            }
+
+            app.Name = trimmed;
+        }
+
+        if (hostId is Guid nextHost)
+        {
+            if (nextHost == Guid.Empty)
+            {
+                return (false, "Enter a Docker host.");
+            }
+
+            app.HostId = nextHost;
         }
 
         if (string.IsNullOrWhiteSpace(image) && string.IsNullOrWhiteSpace(composeYaml))
@@ -189,13 +213,36 @@ public sealed class WorkloadAdmin : IWorkloadStore, ISecretCatalog
         app.Exposed = exposed;
         app.RequiresApproval = ApprovalPolicy.Required(app.Environment, requiresApproval);
         app.AllowDatabaseImages = allowDatabaseImages;
-        await _db.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException exception) when (IsUniqueViolation(exception))
+        {
+            return (false, "An application with that name already exists in this team and environment.");
+        }
+
         if (databaseImagesChanged)
         {
             await WriteDatabaseImageAuditAsync(app.Id, allowDatabaseImages, cancellationToken);
         }
 
+        await _audit.WriteAsync(new AuditRecord("apps.updated", "application", app.Id.ToString(), _currentUser.UserId), cancellationToken);
         return (true, null);
+    }
+
+    public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var app = await _db.Apps.SingleOrDefaultAsync(item => item.Id == id, cancellationToken);
+        if (app is null || !await CanSeeAsync(app.TeamId, cancellationToken))
+        {
+            return false;
+        }
+
+        _db.Apps.Remove(app);
+        await _db.SaveChangesAsync(cancellationToken);
+        await _audit.WriteAsync(new AuditRecord("apps.deleted", "application", id.ToString(), _currentUser.UserId), cancellationToken);
+        return true;
     }
 
     public async Task<IReadOnlyList<SecretReference>> ListSecretsAsync(Guid teamId, string environment, CancellationToken cancellationToken)
@@ -400,6 +447,19 @@ public sealed class WorkloadAdmin : IWorkloadStore, ISecretCatalog
         }
 
         return true;
+    }
+
+    private static bool IsUniqueViolation(DbUpdateException exception)
+    {
+        for (Exception? current = exception; current is not null; current = current.InnerException)
+        {
+            if (current is PostgresException postgres && postgres.SqlState == PostgresErrorCodes.UniqueViolation)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private async Task<bool> CanSeeAsync(Guid teamId, CancellationToken cancellationToken)

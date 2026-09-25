@@ -305,6 +305,8 @@ public sealed class DeployLeaseTests
         public Task SetStatusAsync(Guid id, string status, CancellationToken cancellationToken) => Task.CompletedTask;
 
         public Task ReplaceDesiredAsync(Guid id, DesiredState desired, CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken) => Task.FromResult(true);
     }
 
     private sealed class FixedHosts : IDockerHostLookup
