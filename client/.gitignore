@@ -5,6 +5,8 @@
 /tmp
 /out-tsc
 /bazel-out
+/storybook-static
+*storybook.log
 
 # Node
 /node_modules
