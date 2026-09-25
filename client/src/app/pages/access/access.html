@@ -1,166 +1,176 @@
-<h1>Access</h1>
+<div class="mb-4 flex flex-wrap items-baseline gap-3">
+  <h1 class="m-0">Access</h1>
+  @if (status() === 'ready' && refreshing()) {
+    <p class="m-0 text-sm text-neutral-600" role="status">Refreshing…</p>
+  }
+</div>
 @if (status() === 'loading') {
-  <p>Loading access.</p>
+  <div aria-busy="true">
+    <app-page-state kind="loading" message="Loading access." />
+  </div>
 } @else if (status() === 'error') {
-  <p>Access could not be loaded.</p>
+  <app-page-state kind="error" message="Access could not be loaded." (retry)="load()" />
 } @else {
-  <section *appHasPermission="'access.users.manage'">
-    <h2>Users</h2>
-    <form [formGroup]="userForm" (ngSubmit)="createUser()">
-      <label for="user-email">Email</label>
-      <input id="user-email" type="email" formControlName="email" />
-      <label for="user-name">Display name</label>
-      <input id="user-name" formControlName="displayName" />
-      <label for="user-password">Password</label>
-      <input id="user-password" type="password" formControlName="password" />
-      <label for="user-role">Role</label>
-      <select id="user-role" formControlName="roleId">
-        <option value="">No role yet</option>
-        @for (role of roles(); track role.id) {
-          <option [value]="role.id">{{ role.name }}</option>
-        }
-      </select>
-      <button type="submit" [disabled]="busy() !== null">{{ busy() === 'user' ? 'Creating…' : 'Create user' }}</button>
-    </form>
+  @if (refreshError()) {
+    <app-page-state kind="error" message="Access could not be loaded." (retry)="load()" />
+  }
+
+  <app-section-block *appHasPermission="'access.users.manage'" heading="Users">
     @if (users().length === 0) {
-      <p>No users are provisioned yet.</p>
+      <app-page-state kind="empty" message="No users are provisioned yet." />
     } @else {
-      <ul>
+      <app-record-list>
         @for (user of users(); track user.id) {
-          <li>
-            {{ user.displayName }} ({{ user.email }})
+          <app-record-row>
+            <span recordTitle>{{ user.displayName }} ({{ user.email }})</span>
             @if (user.disabled) {
-              <span>Disabled</span>
-            } @else {
-              <button type="button" [disabled]="busy() !== null" (click)="disable(user)">{{ busy() === 'disable:' + user.id ? 'Disabling…' : 'Disable' }}</button>
+              <span recordStatus>Disabled</span>
             }
-          </li>
+            <div recordActions>
+              @if (!user.disabled) {
+                <button mat-stroked-button type="button" [disabled]="isBusy('disable:' + user.id)" [attr.aria-busy]="isBusy('disable:' + user.id)" (click)="disable(user)">
+                  {{ isBusy('disable:' + user.id) ? 'Disabling…' : 'Disable' }}
+                </button>
+              }
+            </div>
+          </app-record-row>
         }
-      </ul>
+      </app-record-list>
     }
-  </section>
+    <details class="mt-4 max-w-xl">
+      <summary class="cursor-pointer font-medium">New user</summary>
+      <form class="mt-4" [formGroup]="userForm" (ngSubmit)="createUser()">
+        <app-text-field label="Email" inputId="user-email" type="email" formControlName="email" [error]="fieldError(userForm.controls.email, { required: 'Enter an email.', email: 'Enter a valid email.' })" />
+        <app-text-field label="Display name" inputId="user-name" formControlName="displayName" [error]="fieldError(userForm.controls.displayName, { required: 'Enter a display name.' })" />
+        <app-text-field label="Password" inputId="user-password" type="password" formControlName="password" [error]="fieldError(userForm.controls.password, { required: 'Enter a password.' })" />
+        <app-select-field label="Role" inputId="user-role" formControlName="roleId" [options]="roleOptions()" />
+        <button mat-flat-button type="submit" [disabled]="isBusy('user')" [attr.aria-busy]="isBusy('user')">{{ isBusy('user') ? 'Creating…' : 'Create user' }}</button>
+      </form>
+    </details>
+  </app-section-block>
 
-  <section *appHasPermission="'access.teams.manage'">
-    <h2>Teams</h2>
-    <form [formGroup]="teamForm" (ngSubmit)="createTeam()">
-      <label for="team-name">Name</label>
-      <input id="team-name" formControlName="name" />
-      <button type="submit" [disabled]="busy() !== null">{{ busy() === 'team' ? 'Creating…' : 'Create team' }}</button>
-    </form>
+  <app-section-block *appHasPermission="'access.teams.manage'" heading="Teams">
     @if (teams().length === 0) {
-      <p>No teams exist yet.</p>
+      <app-page-state kind="empty" message="No teams exist yet." />
     } @else {
-      <ul>
+      <app-record-list>
         @for (team of teams(); track team.id) {
-          <li>{{ team.name }}</li>
+          <app-record-row>
+            <span recordTitle>{{ team.name }}</span>
+          </app-record-row>
         }
-      </ul>
+      </app-record-list>
     }
-    <h2>Team membership</h2>
+    <details class="mt-4 max-w-xl">
+      <summary class="cursor-pointer font-medium">New team</summary>
+      <form class="mt-4" [formGroup]="teamForm" (ngSubmit)="createTeam()">
+        <app-text-field label="Name" inputId="team-name" formControlName="name" [error]="fieldError(teamForm.controls.name, { required: 'Enter a team name.' })" />
+        <button mat-flat-button type="submit" [disabled]="isBusy('team')" [attr.aria-busy]="isBusy('team')">{{ isBusy('team') ? 'Creating…' : 'Create team' }}</button>
+      </form>
+    </details>
+    <h3 class="mt-6">Team membership</h3>
     <form [formGroup]="memberForm" (ngSubmit)="addMember()">
-      <label for="member-team">Team</label>
-      <select id="member-team" formControlName="teamId">
-        <option value="">Select a team</option>
-        @for (team of teams(); track team.id) {
-          <option [value]="team.id">{{ team.name }}</option>
-        }
-      </select>
-      <label for="member-user">User</label>
-      <select id="member-user" formControlName="userId">
-        <option value="">Select a user</option>
-        @for (user of users(); track user.id) {
-          <option [value]="user.id">{{ user.displayName }}</option>
-        }
-      </select>
-      <button type="submit" [disabled]="busy() !== null">{{ busy() === 'member' ? 'Adding…' : 'Add member' }}</button>
+      <app-select-field label="Team" inputId="member-team" formControlName="teamId" [options]="teamOptions()" [error]="fieldError(memberForm.controls.teamId, { required: 'Select a team.' })" />
+      <app-select-field label="User" inputId="member-user" formControlName="userId" [options]="userOptions()" [error]="fieldError(memberForm.controls.userId, { required: 'Select a user.' })" />
+      <button mat-flat-button type="submit" [disabled]="isBusy('member')" [attr.aria-busy]="isBusy('member')">{{ isBusy('member') ? 'Adding…' : 'Add member' }}</button>
     </form>
-  </section>
+  </app-section-block>
 
-  <section *appHasPermission="'access.roles.manage'">
-    <h2>Roles</h2>
-    <form [formGroup]="roleForm" (ngSubmit)="saveRole()">
-      <label for="role-name">Name</label>
-      <input id="role-name" formControlName="name" />
-      <label for="role-description">Description</label>
-      <input id="role-description" formControlName="description" />
-      @for (permission of catalog(); track permission.code) {
-        <label [attr.for]="'perm-' + permission.code">
-          <input
-            [id]="'perm-' + permission.code"
-            type="checkbox"
-            [checked]="selectedCodes().includes(permission.code)"
-            (change)="toggleCode(permission.code)"
-          />
-          {{ permission.displayName }} ({{ permission.code }})
-        </label>
-      }
-      <button type="submit" [disabled]="busy() !== null">{{ busy() === 'role' ? 'Saving…' : 'Save role' }}</button>
-    </form>
+  <app-section-block *appHasPermission="'access.roles.manage'" heading="Roles">
     @if (roles().length === 0) {
-      <p>No roles exist yet.</p>
+      <app-page-state kind="empty" message="No roles exist yet." />
     } @else {
-      <ul>
+      <app-record-list>
         @for (role of roles(); track role.id) {
-          <li>
-            {{ role.name }}
-            <button type="button" (click)="editRole(role)">Edit</button>
-          </li>
+          <app-record-row>
+            <span recordTitle>{{ role.name }}</span>
+            <div recordActions>
+              <button mat-stroked-button type="button" (click)="editRole(role)">Edit</button>
+            </div>
+          </app-record-row>
         }
-      </ul>
+      </app-record-list>
     }
-  </section>
+    <form class="mt-4" [formGroup]="roleForm" (ngSubmit)="saveRole()">
+      @if (editingRoleId()) {
+        <h3>Editing {{ editingRoleName() }}</h3>
+      } @else {
+        <h3>New role</h3>
+      }
+      <app-text-field label="Name" inputId="role-name" formControlName="name" [error]="fieldError(roleForm.controls.name, { required: 'Enter a role name.' })" />
+      <app-text-field label="Description" inputId="role-description" formControlName="description" />
+      @for (group of permissionGroups(); track group.module) {
+        <fieldset class="mb-4 max-w-xl border border-neutral-200 p-3">
+          <legend>{{ group.module }}</legend>
+          <div class="flex flex-col gap-2">
+            @for (permission of group.items; track permission.code) {
+              <app-checkbox-field [inputId]="'perm-' + permission.code" [checked]="selectedCodes().includes(permission.code)" (checkedChange)="setCode(permission.code, $event)">
+                {{ permission.displayName }} <span class="text-neutral-600">({{ permission.code }})</span>
+              </app-checkbox-field>
+            }
+          </div>
+        </fieldset>
+      }
+      <div class="flex flex-wrap gap-2">
+        <button mat-flat-button type="submit" [disabled]="isBusy('role')" [attr.aria-busy]="isBusy('role')">{{ isBusy('role') ? 'Saving…' : 'Save role' }}</button>
+        @if (editingRoleId()) {
+          <button mat-stroked-button type="button" [disabled]="isBusy('role')" (click)="cancelRole()">Cancel</button>
+        }
+      </div>
+    </form>
+  </app-section-block>
 
-  <section *appHasPermission="'access.breakglass.grant'">
-    <h2>Break-glass</h2>
+  <app-section-block *appHasPermission="'access.breakglass.grant'" heading="Break-glass">
     <p>This grant is checked by the same permission API. It does not open a shell or the Docker socket.</p>
     <form [formGroup]="grantForm" (ngSubmit)="grant()">
-      <label for="grant-user">User id</label>
-      <input id="grant-user" formControlName="userId" />
-      <label for="grant-permission">Permission</label>
-      <select id="grant-permission" formControlName="permissionCode">
-        <option value="">Choose a permission</option>
-        @for (permission of catalog(); track permission.code) {
-          <option [value]="permission.code">{{ permission.displayName }} ({{ permission.code }})</option>
-        }
-      </select>
-      <label for="grant-minutes">Minutes</label>
-      <input id="grant-minutes" type="number" min="5" max="60" formControlName="minutes" />
-      <button type="submit" [disabled]="busy() !== null">{{ busy() === 'grant' ? 'Granting…' : 'Grant' }}</button>
+      @if (canManageUsers()) {
+        <app-select-field label="User" inputId="grant-user" formControlName="userId" [options]="userOptions()" [error]="fieldError(grantForm.controls.userId, { required: 'Select a user.' })" />
+      } @else {
+        <app-text-field label="User id" inputId="grant-user" formControlName="userId" [error]="fieldError(grantForm.controls.userId, { required: 'Enter a user id.' })" />
+      }
+      <app-select-field label="Permission" inputId="grant-permission" formControlName="permissionCode" [options]="permissionOptions()" [error]="fieldError(grantForm.controls.permissionCode, { required: 'Choose a permission.' })" />
+      <app-text-field label="Minutes" inputId="grant-minutes" type="number" min="5" max="60" formControlName="minutes" [error]="fieldError(grantForm.controls.minutes, { required: 'Enter 5 to 60 minutes.', min: 'Enter 5 to 60 minutes.', max: 'Enter 5 to 60 minutes.' })" />
+      <button mat-flat-button type="submit" [disabled]="isBusy('grant')" [attr.aria-busy]="isBusy('grant')">{{ isBusy('grant') ? 'Granting…' : 'Grant' }}</button>
     </form>
     @if (grants().length === 0) {
-      <p>No break-glass grants are active.</p>
+      <app-page-state kind="empty" message="No break-glass grants are active." />
     } @else {
-      <ul>
+      <app-record-list>
         @for (grant of grants(); track grant.id) {
-          <li>{{ grant.permissionCode }} for {{ grant.userId }} until {{ grant.expiresAtUtc }}</li>
+          <app-record-row>
+            <span recordTitle>{{ grant.permissionCode }} for {{ grantUserLabel(grant.userId) }}</span>
+            <span recordMeta>until <time [attr.datetime]="grant.expiresAtUtc">{{ formatTime(grant.expiresAtUtc) }}</time></span>
+          </app-record-row>
         }
-      </ul>
+      </app-record-list>
     }
-  </section>
+  </app-section-block>
 
-  <section *appHasPermission="'access.audit.read'">
-    <h2>Audit</h2>
+  <app-section-block *appHasPermission="'access.audit.read'" heading="Audit">
     @if (audit().length === 0) {
-      <p>No audit entries yet.</p>
+      <app-page-state kind="empty" message="No audit entries yet." />
     } @else {
-      <table>
-        <thead>
-          <tr>
-            <th>When</th>
-            <th>Action</th>
-            <th>Subject</th>
-          </tr>
-        </thead>
-        <tbody>
-          @for (entry of audit(); track entry.id) {
+      <div class="overflow-x-auto">
+        <table class="w-full border-collapse text-left">
+          <caption class="mb-2 text-left">Recent audit entries</caption>
+          <thead>
             <tr>
-              <td>{{ entry.occurredAtUtc }}</td>
-              <td>{{ entry.action }}</td>
-              <td>{{ entry.subjectType }} {{ entry.subjectId }}</td>
+              <th scope="col" class="border-b border-neutral-300 py-2 pr-4">When</th>
+              <th scope="col" class="border-b border-neutral-300 py-2 pr-4">Action</th>
+              <th scope="col" class="border-b border-neutral-300 py-2">Subject</th>
             </tr>
-          }
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            @for (entry of audit(); track entry.id) {
+              <tr>
+                <td class="border-b border-neutral-200 py-2 pr-4"><time [attr.datetime]="entry.occurredAtUtc">{{ formatTime(entry.occurredAtUtc) }}</time></td>
+                <td class="border-b border-neutral-200 py-2 pr-4">{{ entry.action }}</td>
+                <td class="border-b border-neutral-200 py-2">{{ entry.subjectType }} {{ entry.subjectId }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
     }
-  </section>
+  </app-section-block>
 }

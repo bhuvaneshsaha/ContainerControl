@@ -1,35 +1,54 @@
-<h1>Hosts</h1>
-<form [formGroup]="form" (ngSubmit)="register()">
-  <label for="host-name">Name</label>
-  <input id="host-name" formControlName="name" />
-  <label for="host-endpoint">Engine endpoint</label>
-  <input id="host-endpoint" formControlName="endpoint" />
-  <label for="host-client-cert">Client certificate reference</label>
-  <input id="host-client-cert" formControlName="clientCertRef" />
-  <label for="host-client-key">Client key reference</label>
-  <input id="host-client-key" formControlName="clientKeyRef" />
-  <label for="host-ca">CA reference</label>
-  <input id="host-ca" formControlName="caRef" />
-  <p>For a tcp endpoint outside Development, use <code>file:/absolute/path</code> or <code>infisical:prod:/engine/client-cert</code> for the certificate, key, and CA. Do not paste PEM.</p>
-  <button type="submit" [disabled]="busy() !== null">{{ busy() === 'register' ? 'Registering…' : 'Register host' }}</button>
-</form>
+<div class="mb-4 flex flex-wrap items-baseline gap-3">
+  <h1 class="m-0">Hosts</h1>
+  @if (status() === 'ready' && refreshing()) {
+    <p class="m-0 text-sm text-neutral-600" role="status">Refreshing…</p>
+  }
+</div>
 @if (status() === 'loading') {
-  <p>Loading Docker hosts.</p>
+  <div aria-busy="true">
+    <app-page-state kind="loading" message="Loading Docker hosts." />
+  </div>
 } @else if (status() === 'error') {
-  <p>Docker hosts could not be loaded.</p>
-} @else if (hosts().length === 0) {
-  <p>No Docker hosts are registered yet.</p>
+  <app-page-state kind="error" message="Docker hosts could not be loaded." (retry)="load()" />
 } @else {
-  <ul>
-    @for (host of hosts(); track host.id) {
-      <li>
-        {{ host.name }}
-        @if (host.engineVersion) {
-          <span>Engine {{ host.engineVersion }}</span>
-        }
-        <button type="button" [disabled]="busy() !== null" (click)="ping(host)">{{ busy() === 'ping:' + host.id ? 'Pinging…' : 'Ping' }}</button>
-        <button type="button" [disabled]="busy() !== null" (click)="prepare(host)">{{ busy() === 'prepare:' + host.id ? 'Preparing…' : 'Prepare edge' }}</button>
-      </li>
-    }
-  </ul>
+  @if (refreshError()) {
+    <app-page-state kind="error" message="Docker hosts could not be loaded." (retry)="load()" />
+  }
+  @if (hosts().length === 0) {
+    <app-page-state kind="empty" message="No Docker hosts are registered yet. Use Register host to add one." />
+  } @else {
+    <app-record-list>
+      @for (host of hosts(); track host.id) {
+        <app-record-row>
+          <span recordTitle>{{ host.name }}</span>
+          <span recordMeta>
+            @if (host.endpoint) {
+              <span>{{ host.endpoint }}</span>
+            }
+            @if (host.engineVersion) {
+              <span> · Engine {{ host.engineVersion }}</span>
+            }
+          </span>
+          <div recordActions>
+            <app-action-cluster label="Host">
+              <button mat-stroked-button type="button" [disabled]="isBusy('ping:' + host.id)" [attr.aria-busy]="isBusy('ping:' + host.id)" (click)="ping(host)">{{ isBusy('ping:' + host.id) ? 'Pinging…' : 'Ping' }}</button>
+              <button mat-stroked-button type="button" [disabled]="isBusy('prepare:' + host.id)" [attr.aria-busy]="isBusy('prepare:' + host.id)" (click)="prepare(host)">{{ isBusy('prepare:' + host.id) ? 'Preparing…' : 'Prepare edge' }}</button>
+            </app-action-cluster>
+          </div>
+        </app-record-row>
+      }
+    </app-record-list>
+  }
+  <details class="mt-8 max-w-xl rounded-lg border border-neutral-300 bg-white p-4">
+    <summary class="cursor-pointer font-medium">Register host</summary>
+    <form class="mt-4" [formGroup]="form" (ngSubmit)="register()">
+      <app-text-field label="Name" inputId="host-name" formControlName="name" [error]="fieldError(form.controls.name, { required: 'Enter a host name.' })" />
+      <app-text-field label="Engine endpoint" inputId="host-endpoint" formControlName="endpoint" [error]="fieldError(form.controls.endpoint, { required: 'Enter an Engine endpoint.' })" />
+      <app-text-field label="Client certificate reference" inputId="host-client-cert" formControlName="clientCertRef" />
+      <app-text-field label="Client key reference" inputId="host-client-key" formControlName="clientKeyRef" />
+      <app-text-field label="CA reference" inputId="host-ca" formControlName="caRef" />
+      <p>For a tcp endpoint outside Development, use <code>file:/absolute/path</code> or <code>infisical:prod:/engine/client-cert</code> for the certificate, key, and CA. Do not paste PEM.</p>
+      <button mat-flat-button type="submit" [disabled]="isBusy('register')" [attr.aria-busy]="isBusy('register')">{{ isBusy('register') ? 'Registering…' : 'Register host' }}</button>
+    </form>
+  </details>
 }

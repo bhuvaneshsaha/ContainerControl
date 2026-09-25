@@ -1,0 +1,25 @@
+<div class="mb-3 block w-full max-w-xl">
+  <mat-form-field appearance="outline" subscriptSizing="dynamic" class="w-full">
+    <mat-label>{{ label() }}</mat-label>
+    <mat-select
+      [id]="inputId()"
+      [value]="value()"
+      [disabled]="isDisabled()"
+      [errorStateMatcher]="matcher"
+      [attr.aria-invalid]="error() ? true : null"
+      [attr.aria-describedby]="error() ? inputId() + '-error' : null"
+      (selectionChange)="onSelect($event.value)"
+      (blur)="touch()"
+    >
+      @for (option of options(); track option.value) {
+        <mat-option [value]="option.value">{{ option.label }}</mat-option>
+      }
+    </mat-select>
+    @if (hint()) {
+      <mat-hint>{{ hint() }}</mat-hint>
+    }
+  </mat-form-field>
+  @if (error()) {
+    <p class="m-0 text-sm text-red-900" role="alert" [id]="inputId() + '-error'">{{ error() }}</p>
+  }
+</div>

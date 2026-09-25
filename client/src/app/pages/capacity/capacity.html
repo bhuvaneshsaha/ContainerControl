@@ -1,64 +1,74 @@
-<h1>Capacity</h1>
+<div class="mb-4 flex flex-wrap items-baseline gap-3">
+  <h1 class="m-0">Capacity</h1>
+  @if (status() === 'ready' && refreshing()) {
+    <p class="m-0 text-sm text-neutral-600" role="status">Refreshing…</p>
+  }
+</div>
 <p>Team quotas count CPU, memory, and the storage each service declares. A deploy is rejected when the sum is over the quota.</p>
-<section *appHasPermission="'platform.quotas.manage'">
-  <h2>Team quotas</h2>
-  <form [formGroup]="form" (ngSubmit)="save()">
-    <label for="quota-team">Team id</label>
-    <input id="quota-team" formControlName="teamId" />
-    <label for="quota-cpu">CPU</label>
-    <input id="quota-cpu" type="number" step="0.001" formControlName="cpu" />
-    <label for="quota-memory">Memory (GiB)</label>
-    <input id="quota-memory" type="number" step="0.001" formControlName="memoryGiB" />
-    <label for="quota-storage">Storage (GiB)</label>
-    <input id="quota-storage" type="number" step="0.001" formControlName="storageGiB" />
-    <button type="submit" [disabled]="busy() !== null">{{ busy() === 'save' ? 'Saving…' : 'Save quota' }}</button>
-  </form>
-  @if (quotas().length === 0) {
-    <p>No team quotas are saved yet.</p>
-  } @else {
-    <ul>
-      @for (quota of quotas(); track quota.teamId) {
-        <li>{{ quota.teamId }}: {{ cpuLabel(quota.cpuMillicores) }}, {{ bytesLabel(quota.memoryBytes) }} memory, {{ bytesLabel(quota.storageBytes) }} storage</li>
-      }
-    </ul>
+@if (status() === 'loading') {
+  <div aria-busy="true">
+    <app-page-state kind="loading" message="Loading capacity." />
+  </div>
+} @else if (status() === 'error') {
+  <app-page-state kind="error" message="Capacity could not be loaded." (retry)="load()" />
+} @else {
+  @if (refreshError()) {
+    <app-page-state kind="error" message="Capacity could not be loaded." (retry)="load()" />
   }
-</section>
-<section *appHasPermission="'platform.capacity.read'">
-  <h2>Host capacity</h2>
-  @if (status() === 'loading') {
-    <p>Loading capacity.</p>
-  } @else if (status() === 'error') {
-    <p>Capacity could not be loaded.</p>
-  } @else if (hosts().length === 0) {
-    <p>No Docker hosts are registered.</p>
-  } @else {
-    <table>
-      <caption>CPU, memory, and storage reported by each Docker host.</caption>
-      <thead>
-        <tr>
-          <th>Host</th>
-          <th>CPU</th>
-          <th>Memory</th>
-          <th>Storage</th>
-          <th>Read</th>
-        </tr>
-      </thead>
-      <tbody>
-        @for (host of hosts(); track host.hostId) {
-          <tr>
-            <td>{{ host.hostName }}</td>
-            <td>{{ host.cpuCount === null ? 'Not read' : host.cpuCount }}</td>
-            <td>{{ host.memoryBytes === null ? 'Not read' : bytesLabel(host.memoryBytes) }}</td>
-            <td>{{ bytesLabel(host.storageBytes) }}</td>
-            <td>
-              @if (host.readAtUtc) {
-                {{ host.readAtUtc }}
-              }
-              <button type="button" [disabled]="busy() !== null" (click)="read(host)">{{ busy() === 'read:' + host.hostId ? 'Reading…' : 'Read capacity' }}</button>
-            </td>
-          </tr>
+  <app-section-block *appHasPermission="'platform.quotas.manage'" heading="Team quotas">
+    <form [formGroup]="form" (ngSubmit)="save()">
+      <app-select-field label="Team" inputId="quota-team" formControlName="teamId" [options]="teamOptions()" [error]="fieldError(form.controls.teamId, { required: 'Select a team.' })" />
+      <app-text-field label="CPU" inputId="quota-cpu" type="number" step="0.001" formControlName="cpu" [error]="fieldError(form.controls.cpu, { required: 'Enter a CPU quota.', min: 'Enter a CPU quota.' })" />
+      <app-text-field label="Memory (GiB)" inputId="quota-memory" type="number" step="0.001" formControlName="memoryGiB" [error]="fieldError(form.controls.memoryGiB, { required: 'Enter a memory quota.', min: 'Enter a memory quota.' })" />
+      <app-text-field label="Storage (GiB)" inputId="quota-storage" type="number" step="0.001" formControlName="storageGiB" [error]="fieldError(form.controls.storageGiB, { required: 'Enter a storage quota.', min: 'Enter a storage quota.' })" />
+      <button mat-flat-button type="submit" [disabled]="isBusy('save')" [attr.aria-busy]="isBusy('save')">{{ isBusy('save') ? 'Saving…' : 'Save quota' }}</button>
+    </form>
+    @if (quotas().length === 0) {
+      <app-page-state kind="empty" message="No team quotas are saved yet." />
+    } @else {
+      <app-record-list>
+        @for (quota of quotas(); track quota.teamId) {
+          <app-record-row>
+            <span recordTitle>{{ teamLabel(quota.teamId) }}: {{ cpuLabel(quota.cpuMillicores) }}, {{ bytesLabel(quota.memoryBytes) }} memory, {{ bytesLabel(quota.storageBytes) }} storage</span>
+          </app-record-row>
         }
-      </tbody>
-    </table>
-  }
-</section>
+      </app-record-list>
+    }
+  </app-section-block>
+  <app-section-block *appHasPermission="'platform.capacity.read'" heading="Host capacity">
+    @if (hosts().length === 0) {
+      <app-page-state kind="empty" message="No Docker hosts are registered." />
+    } @else {
+      <div class="overflow-x-auto">
+        <table class="w-full border-collapse text-left">
+          <caption class="mb-2 text-left">CPU, memory, and storage reported by each Docker host.</caption>
+          <thead>
+            <tr>
+              <th scope="col" class="border-b border-neutral-300 py-2 pr-4">Host</th>
+              <th scope="col" class="border-b border-neutral-300 py-2 pr-4">CPU</th>
+              <th scope="col" class="border-b border-neutral-300 py-2 pr-4">Memory</th>
+              <th scope="col" class="border-b border-neutral-300 py-2 pr-4">Storage</th>
+              <th scope="col" class="border-b border-neutral-300 py-2">Read</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (host of hosts(); track host.hostId) {
+              <tr>
+                <td class="border-b border-neutral-200 py-2 pr-4">{{ host.hostName }}</td>
+                <td class="border-b border-neutral-200 py-2 pr-4">{{ host.cpuCount === null ? 'Not read' : host.cpuCount }}</td>
+                <td class="border-b border-neutral-200 py-2 pr-4">{{ host.memoryBytes === null ? 'Not read' : bytesLabel(host.memoryBytes) }}</td>
+                <td class="border-b border-neutral-200 py-2 pr-4">{{ bytesLabel(host.storageBytes) }}</td>
+                <td class="border-b border-neutral-200 py-2">
+                  @if (host.readAtUtc) {
+                    <time [attr.datetime]="host.readAtUtc">{{ formatTime(host.readAtUtc) }}</time>
+                  }
+                  <button mat-stroked-button type="button" [disabled]="isBusy('read:' + host.hostId)" [attr.aria-busy]="isBusy('read:' + host.hostId)" (click)="read(host)">{{ isBusy('read:' + host.hostId) ? 'Reading…' : 'Read capacity' }}</button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </app-section-block>
+}

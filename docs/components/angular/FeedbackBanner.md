@@ -56,10 +56,10 @@ this.feedback.status('You need Manage Docker hosts (platform.hosts.manage) to op
 ```
 
 ## Accessibility
-Status notices use `role="status"`. Errors use `role="alert"`. Each notice has a Dismiss button. The banner does not move focus.
+Status notices use `role="status"`. Errors use `role="alert"`, a visible **Error** prefix, and a danger border. Each notice has a Dismiss button. The banner does not move focus. Field validation stays on the control; do not copy it into this banner.
 
 ## Dependencies
-`FeedbackService`. No component library.
+`FeedbackService` and Angular Material stroked buttons.
 
 ## Do
 - Clear notices at the start of a user action, not during page load, so a denial notice is still visible after redirect.

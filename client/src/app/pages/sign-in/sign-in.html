@@ -1,13 +1,12 @@
-<h1>Sign in</h1>
-<form [formGroup]="form" (ngSubmit)="submit()">
-  <label for="email">Email</label>
-  <input id="email" type="email" formControlName="email" autocomplete="username" [attr.aria-invalid]="form.controls.email.invalid && form.controls.email.touched" [attr.aria-describedby]="errorMessage() ? 'sign-in-error' : null" />
-
-  <label for="password">Password</label>
-  <input id="password" type="password" formControlName="password" autocomplete="current-password" [attr.aria-invalid]="form.controls.password.invalid && form.controls.password.touched" [attr.aria-describedby]="errorMessage() ? 'sign-in-error' : null" />
-
-  <button type="submit" [disabled]="submitting()">Sign in</button>
-  @if (errorMessage()) {
-    <p id="sign-in-error" role="alert">{{ errorMessage() }}</p>
-  }
-</form>
+<mat-card class="max-w-xl">
+  <mat-card-content>
+    <h1>Sign in</h1>
+    <form [formGroup]="form" (ngSubmit)="submit()">
+      <app-text-field label="Email" inputId="email" type="email" autocomplete="username" formControlName="email" [error]="fieldError(form.controls.email, { required: 'Enter an email.', email: 'Enter a valid email.' })" />
+      <app-text-field label="Password" inputId="password" type="password" autocomplete="current-password" formControlName="password" [error]="fieldError(form.controls.password, { required: 'Enter a password.' })" />
+      <button mat-flat-button type="submit" [disabled]="submitting()" [attr.aria-busy]="submitting()">
+        {{ submitting() ? 'Signing in…' : 'Sign in' }}
+      </button>
+    </form>
+  </mat-card-content>
+</mat-card>

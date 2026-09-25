@@ -1,42 +1,46 @@
-<h1>Registries</h1>
+<div class="mb-4 flex flex-wrap items-baseline gap-3">
+  <h1 class="m-0">Registries</h1>
+  @if (status() === 'ready' && refreshing()) {
+    <p class="m-0 text-sm text-neutral-600" role="status">Refreshing…</p>
+  }
+</div>
 <p>Pull credentials are stored in Infisical. This page does not connect to registry:2.</p>
-<form [formGroup]="form" (ngSubmit)="save()" *appHasPermission="'registries.manage'">
-  <label for="registry-name">Name</label>
-  <input id="registry-name" formControlName="name" />
-  <label for="registry-kind">Type</label>
-  <select id="registry-kind" formControlName="kind">
-    @for (kind of kinds; track kind) {
-      <option [value]="kind">{{ kind }}</option>
-    }
-  </select>
-  <label for="registry-server">Host</label>
-  <input id="registry-server" formControlName="server" />
-  <label for="registry-environment">Infisical environment</label>
-  <select id="registry-environment" formControlName="environment">
-    <option value="dev">dev</option>
-    <option value="staging">staging</option>
-    <option value="prod">prod</option>
-  </select>
-  <label for="registry-username">Username</label>
-  <input id="registry-username" formControlName="username" />
-  <label for="registry-password">Password</label>
-  <input id="registry-password" type="password" formControlName="password" />
-  <label for="registry-access-key">ECR access key id</label>
-  <input id="registry-access-key" formControlName="accessKeyId" />
-  <label for="registry-secret-key">ECR secret access key</label>
-  <input id="registry-secret-key" type="password" formControlName="secretAccessKey" />
-  <button type="submit" [disabled]="busy() !== null">{{ busy() === 'save' ? 'Saving…' : 'Save registry' }}</button>
-</form>
 @if (status() === 'loading') {
-  <p>Loading registries.</p>
+  <div aria-busy="true">
+    <app-page-state kind="loading" message="Loading registries." />
+  </div>
 } @else if (status() === 'error') {
-  <p>Registries could not be loaded.</p>
-} @else if (registries().length === 0) {
-  <p>No registry connections are saved yet.</p>
+  <app-page-state kind="error" message="Registries could not be loaded." (retry)="load()" />
 } @else {
-  <ul>
-    @for (registry of registries(); track registry.id) {
-      <li>{{ registry.name }} ({{ registry.kind }}) {{ registry.server }}</li>
-    }
-  </ul>
+  @if (refreshError()) {
+    <app-page-state kind="error" message="Registries could not be loaded." (retry)="load()" />
+  }
+  @if (registries().length === 0) {
+    <app-page-state kind="empty" message="No registry connections are saved yet. Use New registry to add one." />
+  } @else {
+    <app-record-list>
+      @for (registry of registries(); track registry.id) {
+        <app-record-row>
+          <span recordTitle>{{ registry.name }}</span>
+          <span recordMeta>{{ registry.kind }} · {{ registry.server }} · {{ registry.environment }}</span>
+        </app-record-row>
+      }
+    </app-record-list>
+  }
+  <details class="mt-8 max-w-xl rounded-lg border border-neutral-300 bg-white p-4" *appHasPermission="'registries.manage'">
+    <summary class="cursor-pointer font-medium">New registry</summary>
+    <form class="mt-4" [formGroup]="form" (ngSubmit)="save()">
+      <app-text-field label="Name" inputId="registry-name" formControlName="name" [error]="fieldError(form.controls.name, { required: 'Enter a name.' })" />
+      <app-select-field label="Type" inputId="registry-kind" formControlName="kind" [options]="kindOptions" [error]="fieldError(form.controls.kind, { required: 'Choose a type.' })" />
+      <app-text-field label="Host" inputId="registry-server" formControlName="server" [error]="fieldError(form.controls.server, { required: 'Enter a host.' })" />
+      <app-select-field label="Infisical environment" inputId="registry-environment" formControlName="environment" [options]="environmentOptions" />
+      <app-text-field label="Username" inputId="registry-username" formControlName="username" />
+      <app-text-field label="Password" inputId="registry-password" type="password" formControlName="password" />
+      @if (registryKind() === 'Ecr') {
+        <app-text-field label="ECR access key id" inputId="registry-access-key" formControlName="accessKeyId" />
+        <app-text-field label="ECR secret access key" inputId="registry-secret-key" type="password" formControlName="secretAccessKey" />
+      }
+      <button mat-flat-button type="submit" [disabled]="isBusy('save')" [attr.aria-busy]="isBusy('save')">{{ isBusy('save') ? 'Saving…' : 'Save registry' }}</button>
+    </form>
+  </details>
 }

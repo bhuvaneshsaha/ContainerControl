@@ -1,18 +1,17 @@
 <h1>API tokens</h1>
-<p>CI sends the token as a bearer token to the deploy webhook. Copy it before you leave this panel. It is shown once.</p>
-<p>Issued tokens cannot be listed or revoked from this screen. The API issues a token and does not return the list or a revoke action.</p>
-<form [formGroup]="form" (ngSubmit)="issue()">
-  <label for="token-name">Name</label>
-  <input id="token-name" formControlName="name" />
-  <button type="submit" [disabled]="busy() !== null">{{ busy() === 'issue' ? 'Issuing…' : 'Issue token' }}</button>
+<p>CI sends the token as a bearer token to the deploy webhook. Issued tokens cannot be listed or revoked from this screen.</p>
+<form class="max-w-xl" [formGroup]="form" (ngSubmit)="issue()">
+  <app-text-field label="Name" inputId="token-name" formControlName="name" [error]="fieldError(form.controls.name, { required: 'Enter a token name.' })" />
+  <button mat-flat-button type="submit" [disabled]="isBusy('issue')" [attr.aria-busy]="isBusy('issue')">{{ isBusy('issue') ? 'Issuing…' : 'Issue token' }}</button>
 </form>
 @if (issued(); as issued) {
-  <section class="token-panel" role="status" aria-labelledby="issued-title">
+  <section class="mt-4 max-w-xl rounded-lg border border-neutral-300 bg-white p-4" role="status" aria-labelledby="issued-title">
     <h2 id="issued-title">Token issued</h2>
     <p>Copy this token now. It will not be shown again.</p>
-    <label for="issued-token">Token value</label>
-    <input id="issued-token" readonly [value]="issued.token" />
-    <button type="button" (click)="copy()">Copy token</button>
-    <button type="button" (click)="dismissIssued()">I’ve copied it</button>
+    <app-text-field label="Token value" inputId="issued-token" [displayValue]="issued.token" [readOnly]="true" />
+    <div class="flex flex-wrap gap-2">
+      <button mat-stroked-button type="button" (click)="copy()">Copy token</button>
+      <button mat-stroked-button type="button" (click)="dismissIssued()">I’ve copied it</button>
+    </div>
   </section>
 }

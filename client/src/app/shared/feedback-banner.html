@@ -1,8 +1,19 @@
-<div class="feedback-stack">
+<div class="mb-4 flex flex-col gap-2">
   @for (item of feedback.items(); track item.id) {
-    <p class="feedback" [class.feedback-alert]="item.kind === 'alert'" [attr.role]="item.kind">
-      <span>{{ item.text }}</span>
-      <button type="button" (click)="feedback.dismiss(item.id)">Dismiss</button>
+    <p
+      class="flex items-center justify-between gap-3 rounded-lg border bg-white px-3 py-2"
+      [class.border-red-800]="item.kind === 'alert'"
+      [class.text-red-900]="item.kind === 'alert'"
+      [class.border-neutral-300]="item.kind !== 'alert'"
+      [attr.role]="item.kind"
+    >
+      <span>
+        @if (item.kind === 'alert') {
+          <strong>Error</strong>
+        }
+        {{ item.text }}
+      </span>
+      <button mat-stroked-button type="button" (click)="feedback.dismiss(item.id)">Dismiss</button>
     </p>
   }
 </div>

@@ -1,24 +1,27 @@
-<header class="shell-header">
-  <p class="product">ContainerControl</p>
+<a id="skip-link" href="#content" class="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded focus:bg-white focus:px-3 focus:py-2 focus:shadow">
+  Skip to content
+</a>
+<header class="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-neutral-300 bg-white px-4 py-3">
+  <a routerLink="/" class="product text-lg font-semibold text-neutral-900 no-underline">ContainerControl</a>
   @if (signedIn()) {
-    <nav aria-label="Primary">
-      <a routerLink="/permissions">My access</a>
-      <a *appHasPermission="'apps.read'" routerLink="/apps">Applications</a>
+    <nav class="flex min-w-0 flex-1 flex-wrap gap-x-3 gap-y-1" aria-label="Primary">
+      <a class="rounded px-1 py-0.5 text-neutral-800 no-underline hover:underline" routerLink="/permissions" routerLinkActive="font-semibold underline underline-offset-4" ariaCurrentWhenActive="page">My access</a>
+      <a class="rounded px-1 py-0.5 text-neutral-800 no-underline hover:underline" *appHasPermission="'apps.read'" routerLink="/apps" routerLinkActive="font-semibold underline underline-offset-4" ariaCurrentWhenActive="page">Applications</a>
       @if (canOpenAccess()) {
-        <a routerLink="/access">Access</a>
+        <a class="rounded px-1 py-0.5 text-neutral-800 no-underline hover:underline" routerLink="/access" routerLinkActive="font-semibold underline underline-offset-4" ariaCurrentWhenActive="page">Access</a>
       }
-      <a *appHasPermission="'platform.hosts.manage'" routerLink="/hosts">Hosts</a>
+      <a class="rounded px-1 py-0.5 text-neutral-800 no-underline hover:underline" *appHasPermission="'platform.hosts.manage'" routerLink="/hosts" routerLinkActive="font-semibold underline underline-offset-4" ariaCurrentWhenActive="page">Hosts</a>
       @if (canOpenCapacity()) {
-        <a routerLink="/capacity">Capacity</a>
+        <a class="rounded px-1 py-0.5 text-neutral-800 no-underline hover:underline" routerLink="/capacity" routerLinkActive="font-semibold underline underline-offset-4" ariaCurrentWhenActive="page">Capacity</a>
       }
-      <a *appHasPermission="'registries.read'" routerLink="/registries">Registries</a>
-      <a *appHasPermission="'edge.dns.manage'" routerLink="/domains">Domains</a>
-      <a *appHasPermission="'access.tokens.manage'" routerLink="/tokens">Tokens</a>
+      <a class="rounded px-1 py-0.5 text-neutral-800 no-underline hover:underline" *appHasPermission="'registries.read'" routerLink="/registries" routerLinkActive="font-semibold underline underline-offset-4" ariaCurrentWhenActive="page">Registries</a>
+      <a class="rounded px-1 py-0.5 text-neutral-800 no-underline hover:underline" *appHasPermission="'edge.dns.manage'" routerLink="/domains" routerLinkActive="font-semibold underline underline-offset-4" ariaCurrentWhenActive="page">Allowed domains</a>
+      <a class="rounded px-1 py-0.5 text-neutral-800 no-underline hover:underline" *appHasPermission="'access.tokens.manage'" routerLink="/tokens" routerLinkActive="font-semibold underline underline-offset-4" ariaCurrentWhenActive="page">API tokens</a>
     </nav>
-    <button type="button" (click)="signOut()">Sign out</button>
+    <button mat-stroked-button class="ml-auto" type="button" (click)="signOut()">Sign out</button>
   }
 </header>
-<main>
+<main id="content" class="mx-auto w-full max-w-6xl px-4 py-4">
   <app-feedback-banner />
   <router-outlet />
 </main>

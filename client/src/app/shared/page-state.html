@@ -1,0 +1,14 @@
+@switch (kind()) {
+  @case ('loading') {
+    <p class="text-neutral-700" role="status" aria-live="polite">{{ message() }}</p>
+  }
+  @case ('error') {
+    <div class="flex flex-wrap items-center gap-3">
+      <p class="m-0 text-red-900" role="alert">{{ message() }}</p>
+      <button mat-stroked-button type="button" (click)="retry.emit()">Retry</button>
+    </div>
+  }
+  @case ('empty') {
+    <p class="text-neutral-700">{{ message() }}</p>
+  }
+}

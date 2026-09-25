@@ -1,33 +1,44 @@
 import { HttpClient } from '@angular/common/http';
 import { Component, inject, signal } from '@angular/core';
-import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { AbstractControl, FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { MatButtonModule } from '@angular/material/button';
 import { firstValueFrom } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
 import { runBusy } from '../../core/busy';
 import { FeedbackService } from '../../core/feedback';
 import { problemMessage } from '../../core/problem-message';
+import { controlError, focusFirstInvalid } from '../../shared/field-error';
+import { TextField } from '../../shared/text-field';
 
 @Component({
   selector: 'app-tokens',
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, MatButtonModule, TextField],
   templateUrl: './tokens.html',
 })
 export class Tokens {
   private readonly http = inject(HttpClient);
   private readonly feedback = inject(FeedbackService);
 
-  readonly busy = signal<string | null>(null);
+  readonly busy = signal<ReadonlySet<string>>(new Set());
   readonly issued = signal<{ id: string; token: string } | null>(null);
   readonly form = new FormGroup({
     name: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
   });
 
+  isBusy(key: string): boolean {
+    return this.busy().has(key);
+  }
+
+  fieldError(control: AbstractControl, messages: Record<string, string>): string {
+    return controlError(control, messages);
+  }
+
   async issue(): Promise<void> {
     this.feedback.clear();
+    this.form.markAllAsTouched();
     if (this.form.invalid) {
-      this.form.markAllAsTouched();
-      this.feedback.error('Enter a token name.');
+      focusFirstInvalid([{ control: this.form.controls.name, id: 'token-name' }]);
       return;
     }
 
@@ -38,6 +49,7 @@ export class Tokens {
         );
         this.issued.set(response);
         this.form.controls.name.setValue('');
+        this.form.markAsUntouched();
       } catch (error) {
         this.issued.set(null);
         this.feedback.error(problemMessage(error, 'The API token could not be issued.'));

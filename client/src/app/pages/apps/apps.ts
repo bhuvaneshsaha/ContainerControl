@@ -1,6 +1,7 @@
 import { HttpClient } from '@angular/common/http';
-import { Component, inject, signal } from '@angular/core';
-import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { Component, ElementRef, inject, signal, viewChild } from '@angular/core';
+import { AbstractControl, FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { MatButtonModule } from '@angular/material/button';
 import { HubConnection } from '@microsoft/signalr';
 import { firstValueFrom } from 'rxjs';
 
@@ -9,17 +10,39 @@ import { AppListResponse, AppResponse, HostListResponse, SecretListResponse, Sec
 import { runBusy } from '../../core/busy';
 import { ConfirmService } from '../../core/confirm';
 import { FeedbackService } from '../../core/feedback';
+import { runLoad } from '../../core/load-state';
 import { appendLogLine, startLogTail } from '../../core/log-tail';
 import { PermissionService } from '../../core/permissions';
 import { problemMessage } from '../../core/problem-message';
+import { ActionCluster } from '../../shared/action-cluster';
+import { CheckboxField } from '../../shared/checkbox-field';
+import { controlError, focusFirstInvalid } from '../../shared/field-error';
 import { HasPermission } from '../../shared/has-permission';
+import { PageState } from '../../shared/page-state';
+import { RecordList, RecordRow } from '../../shared/record-list';
+import { SelectOption, SelectField } from '../../shared/select-field';
+import { StatusBadge } from '../../shared/status-badge';
+import { TextField } from '../../shared/text-field';
 import { composeServiceNames, secretTargetsForSave } from './compose-services';
 
 type AppAction = 'deploy' | 'approve' | 'start' | 'stop' | 'restart' | 'rollback';
+type InspectKind = 'secrets' | 'logs' | 'live' | 'stats';
 
 @Component({
   selector: 'app-apps',
-  imports: [ReactiveFormsModule, HasPermission],
+  imports: [
+    ReactiveFormsModule,
+    HasPermission,
+    MatButtonModule,
+    TextField,
+    SelectField,
+    CheckboxField,
+    PageState,
+    RecordList,
+    RecordRow,
+    StatusBadge,
+    ActionCluster,
+  ],
   templateUrl: './apps.html',
 })
 export class Apps {
@@ -27,17 +50,21 @@ export class Apps {
   private readonly feedback = inject(FeedbackService);
   private readonly confirm = inject(ConfirmService);
   private readonly permissions = inject(PermissionService);
+  private readonly createDetails = viewChild<ElementRef<HTMLDetailsElement>>('createDetails');
   private logConnection: HubConnection | null = null;
 
   readonly status = signal<'loading' | 'ready' | 'error'>('loading');
-  readonly busy = signal<string | null>(null);
+  readonly refreshing = signal(false);
+  readonly refreshError = signal(false);
+  readonly busy = signal<ReadonlySet<string>>(new Set());
   readonly detail = signal('');
   readonly apps = signal<readonly AppResponse[]>([]);
   readonly teams = signal<{ id: string; name: string }[]>([]);
   readonly hosts = signal<{ id: string; name: string }[]>([]);
-  readonly selected = signal<AppResponse | null>(null);
+  readonly inspect = signal<{ appId: string; kind: InspectKind } | null>(null);
   readonly secrets = signal<readonly SecretResponse[]>([]);
   readonly serviceChoices = signal<readonly string[]>([]);
+  readonly secretServiceError = signal('');
   readonly secretForm = new FormGroup({
     name: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
     injectionMode: new FormControl('env', { nonNullable: true, validators: [Validators.required] }),
@@ -74,8 +101,44 @@ export class Apps {
     void this.load();
   }
 
+  isBusy(key: string): boolean {
+    return this.busy().has(key);
+  }
+
+  fieldError(control: AbstractControl, messages: Record<string, string>): string {
+    return controlError(control, messages);
+  }
+
+  can(code: string): boolean {
+    return this.permissions.hasPermission(code);
+  }
+
   actionKey(app: AppResponse, action: AppAction): string {
     return `${action}:${app.id}`;
+  }
+
+  inspectedApp(): AppResponse | null {
+    const current = this.inspect();
+    if (!current) {
+      return null;
+    }
+
+    return this.apps().find((item) => item.id === current.appId) ?? null;
+  }
+
+  inspectTitle(app: AppResponse): string {
+    switch (this.inspect()?.kind) {
+      case 'secrets':
+        return `Secrets for ${app.name}`;
+      case 'logs':
+        return `Logs for ${app.name}`;
+      case 'live':
+        return `Live logs for ${app.name}`;
+      case 'stats':
+        return `Stats for ${app.name}`;
+      default:
+        return app.name;
+    }
   }
 
   secretWriteState(app: AppResponse): 'form' | 'prod' | 'hidden' {
@@ -91,8 +154,7 @@ export class Apps {
   }
 
   async load(): Promise<void> {
-    this.status.set('loading');
-    try {
+    await runLoad(this.status, this.refreshing, this.refreshError, async () => {
       const [apps, teams, hosts] = await Promise.all([
         firstValueFrom(this.http.get<AppListResponse>(`${environment.apiUrl}/apps`)),
         firstValueFrom(this.http.get<TeamListResponse>(`${environment.apiUrl}/access/teams`)),
@@ -101,30 +163,36 @@ export class Apps {
       this.apps.set(apps.apps);
       this.teams.set(teams.teams);
       this.hosts.set(hosts.hosts);
-      this.status.set('ready');
-    } catch {
-      this.status.set('error');
-    }
+      const current = this.inspect();
+      if (current && !apps.apps.some((item) => item.id === current.appId)) {
+        this.inspect.set(null);
+        this.secrets.set([]);
+        await this.stopHub();
+      }
+    });
   }
 
   private async refreshApps(): Promise<void> {
     const response = await firstValueFrom(this.http.get<AppListResponse>(`${environment.apiUrl}/apps`));
     this.apps.set(response.apps);
-    const selected = this.selected();
-    if (selected) {
-      const next = response.apps.find((item) => item.id === selected.id) ?? null;
-      this.selected.set(next);
-      if (!next) {
-        this.secrets.set([]);
-      }
+    const current = this.inspect();
+    if (current && !response.apps.some((item) => item.id === current.appId)) {
+      this.inspect.set(null);
+      this.secrets.set([]);
+      await this.stopHub();
     }
   }
 
   async create(): Promise<void> {
     this.feedback.clear();
+    this.form.markAllAsTouched();
     if (this.form.invalid) {
-      this.form.markAllAsTouched();
-      this.feedback.error('Enter a name, team, host, and a compose file.');
+      focusFirstInvalid([
+        { control: this.form.controls.name, id: 'app-name' },
+        { control: this.form.controls.teamId, id: 'app-team' },
+        { control: this.form.controls.hostId, id: 'app-host' },
+        { control: this.form.controls.composeYaml, id: 'app-compose' },
+      ]);
       return;
     }
 
@@ -149,15 +217,48 @@ export class Apps {
     });
   }
 
+  readonly environmentOptions: readonly SelectOption[] = [
+    { value: 'dev', label: 'dev' },
+    { value: 'staging', label: 'staging' },
+    { value: 'prod', label: 'prod' },
+  ];
+  readonly injectionOptions: readonly SelectOption[] = [
+    { value: 'env', label: 'Environment variable' },
+    { value: 'file', label: 'File' },
+  ];
+
   teamName(app: AppResponse): string {
     return this.teams().find((team) => team.id === app.teamId)?.name ?? 'Unknown team';
+  }
+
+  teamOptions(): SelectOption[] {
+    return [{ value: '', label: 'Select a team' }, ...this.teams().map((team) => ({ value: team.id, label: team.name }))];
+  }
+
+  hostOptions(): SelectOption[] {
+    return [{ value: '', label: 'Select a host' }, ...this.hosts().map((host) => ({ value: host.id, label: host.name }))];
+  }
+
+  editHostOptions(app: AppResponse): SelectOption[] {
+    const options = this.hostOptions();
+    if (!this.hostKnown(app.hostId)) {
+      return [options[0], { value: app.hostId, label: 'Current host' }, ...options.slice(1)];
+    }
+
+    return options;
   }
 
   hostKnown(hostId: string): boolean {
     return this.hosts().some((host) => host.id === hostId);
   }
 
-  openEdit(app: AppResponse): void {
+  async openEdit(app: AppResponse): Promise<void> {
+    await this.stopHub();
+    const details = this.createDetails()?.nativeElement;
+    if (details) {
+      details.open = false;
+    }
+
     this.editing.set(app);
     this.editForm.controls.requireApproval.enable();
     this.editForm.setValue({
@@ -180,29 +281,42 @@ export class Apps {
   }
 
   cancelEdit(): void {
+    if (this.isBusy('edit')) {
+      return;
+    }
+
     this.editing.set(null);
   }
 
   async saveEdit(): Promise<void> {
     const app = this.editing();
     this.feedback.clear();
+    this.clearImageOrComposeError();
+    if (!this.editForm.controls.name.value.trim()) {
+      this.editForm.controls.name.setErrors({ required: true });
+    }
+
+    this.editForm.markAllAsTouched();
     if (!app || this.editForm.invalid) {
-      this.editForm.markAllAsTouched();
-      this.feedback.error('Enter a name and a Docker host.');
+      focusFirstInvalid([
+        { control: this.editForm.controls.name, id: 'edit-app-name' },
+        { control: this.editForm.controls.hostId, id: 'edit-app-host' },
+      ]);
       return;
     }
 
     const value = this.editForm.getRawValue();
-    if (!value.name.trim() || !value.hostId) {
-      this.editForm.markAllAsTouched();
-      this.feedback.error('Enter a name and a Docker host.');
-      return;
-    }
-
     const image = value.image.trim();
     const composeYaml = value.composeYaml.trim();
     if (!image && !composeYaml) {
-      this.feedback.error('Enter an image or a compose file.');
+      this.editForm.controls.image.setErrors({ imageOrCompose: true });
+      this.editForm.controls.composeYaml.setErrors({ imageOrCompose: true });
+      this.editForm.controls.image.markAsTouched();
+      this.editForm.controls.composeYaml.markAsTouched();
+      focusFirstInvalid([
+        { control: this.editForm.controls.image, id: 'edit-app-image' },
+        { control: this.editForm.controls.composeYaml, id: 'edit-app-compose' },
+      ]);
       return;
     }
 
@@ -272,9 +386,10 @@ export class Apps {
         this.editing.set(null);
       }
 
-      if (this.selected()?.id === app.id) {
-        this.selected.set(null);
+      if (this.inspect()?.appId === app.id) {
+        this.inspect.set(null);
         this.secrets.set([]);
+        await this.stopHub();
       }
 
       this.apps.update((items) => items.filter((item) => item.id !== app.id));
@@ -300,6 +415,9 @@ export class Apps {
     }
 
     this.secretForm.controls.serviceNames.setValue([...next]);
+    if (next.size > 0) {
+      this.secretServiceError.set('');
+    }
   }
 
   serviceTargetLabel(secret: SecretResponse): string {
@@ -307,7 +425,10 @@ export class Apps {
   }
 
   async openSecrets(app: AppResponse, keepNotice = false): Promise<void> {
-    this.selected.set(app);
+    await this.stopHub();
+    this.inspect.set({ appId: app.id, kind: 'secrets' });
+    this.detail.set('');
+    this.secretServiceError.set('');
     const choices = composeServiceNames(app.composeYaml, app.image);
     this.serviceChoices.set(choices);
     this.secretForm.controls.serviceNames.setValue(choices.length === 1 ? [...choices] : []);
@@ -328,11 +449,15 @@ export class Apps {
   }
 
   async saveSecret(): Promise<void> {
-    const app = this.selected();
+    const app = this.inspectedApp();
     this.feedback.clear();
+    this.secretServiceError.set('');
+    this.secretForm.markAllAsTouched();
     if (!app || this.secretForm.invalid) {
-      this.secretForm.markAllAsTouched();
-      this.feedback.error('Enter a secret name and value.');
+      focusFirstInvalid([
+        { control: this.secretForm.controls.name, id: 'secret-name' },
+        { control: this.secretForm.controls.value, id: 'secret-value' },
+      ]);
       return;
     }
 
@@ -345,7 +470,8 @@ export class Apps {
     const existing = this.secrets().find((secret) => secret.name === value.name.trim());
     const serviceNames = secretTargetsForSave(value.serviceNames, this.serviceChoices(), existing?.serviceNames);
     if (serviceNames.length === 0) {
-      this.feedback.error('Select at least one service for this secret.');
+      this.secretServiceError.set('Select at least one service for this secret.');
+      document.getElementById('secret-services')?.focus();
       return;
     }
 
@@ -375,7 +501,7 @@ export class Apps {
   }
 
   async deleteSecret(secret: SecretResponse): Promise<void> {
-    const app = this.selected();
+    const app = this.inspectedApp();
     if (!app) {
       return;
     }
@@ -435,11 +561,16 @@ export class Apps {
     });
   }
 
+  async stopLive(): Promise<void> {
+    await this.stopHub();
+  }
+
   async live(app: AppResponse): Promise<void> {
+    await this.stopHub();
+    this.inspect.set({ appId: app.id, kind: 'live' });
     this.detail.set('');
     await runBusy(this.busy, `live:${app.id}`, async () => {
       try {
-        await this.logConnection?.stop();
         const csrf = await firstValueFrom(
           this.http.get<{ token?: string }>(`${environment.apiUrl}/auth/csrf`),
         );
@@ -458,6 +589,9 @@ export class Apps {
   }
 
   async logs(app: AppResponse): Promise<void> {
+    await this.stopHub();
+    this.inspect.set({ appId: app.id, kind: 'logs' });
+    this.detail.set('');
     await runBusy(this.busy, `logs:${app.id}`, async () => {
       try {
         const response = await firstValueFrom(
@@ -471,6 +605,9 @@ export class Apps {
   }
 
   async stats(app: AppResponse): Promise<void> {
+    await this.stopHub();
+    this.inspect.set({ appId: app.id, kind: 'stats' });
+    this.detail.set('');
     await runBusy(this.busy, `stats:${app.id}`, async () => {
       try {
         const response = await firstValueFrom(
@@ -486,6 +623,28 @@ export class Apps {
         this.feedback.error(problemMessage(error, 'Stats could not be loaded.'));
       }
     });
+  }
+
+  private clearImageOrComposeError(): void {
+    for (const control of [this.editForm.controls.image, this.editForm.controls.composeYaml]) {
+      if (control.hasError('imageOrCompose')) {
+        control.updateValueAndValidity();
+      }
+    }
+  }
+
+  private async stopHub(): Promise<void> {
+    const connection = this.logConnection;
+    this.logConnection = null;
+    if (!connection) {
+      return;
+    }
+
+    try {
+      await connection.stop();
+    } catch {
+      // The tail is already closed.
+    }
   }
 }
 

@@ -1,5 +1,6 @@
 import { Component, inject } from '@angular/core';
-import { Router, RouterLink, RouterOutlet } from '@angular/router';
+import { MatButtonModule } from '@angular/material/button';
+import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 
 import { AuthService } from './core/auth';
 import { ConfirmService } from './core/confirm';
@@ -11,9 +12,8 @@ import { HasPermission } from './shared/has-permission';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet, RouterLink, HasPermission, FeedbackBanner, ConfirmDialog],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, HasPermission, FeedbackBanner, ConfirmDialog, MatButtonModule],
   templateUrl: './app.html',
-  styleUrl: './app.css',
 })
 export class App {
   private readonly auth = inject(AuthService);

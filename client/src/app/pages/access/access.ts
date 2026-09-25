@@ -1,6 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Component, inject, signal } from '@angular/core';
-import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { AbstractControl, FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { MatButtonModule } from '@angular/material/button';
 import { firstValueFrom } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
@@ -18,13 +19,33 @@ import {
 import { runBusy } from '../../core/busy';
 import { ConfirmService } from '../../core/confirm';
 import { FeedbackService } from '../../core/feedback';
+import { runLoad } from '../../core/load-state';
 import { PermissionService } from '../../core/permissions';
 import { problemMessage } from '../../core/problem-message';
+import { CheckboxField } from '../../shared/checkbox-field';
+import { controlError, focusFirstInvalid } from '../../shared/field-error';
+import { formatTimestamp } from '../../shared/format-time';
 import { HasPermission } from '../../shared/has-permission';
+import { PageState } from '../../shared/page-state';
+import { RecordList, RecordRow } from '../../shared/record-list';
+import { SectionBlock } from '../../shared/section-block';
+import { SelectOption, SelectField } from '../../shared/select-field';
+import { TextField } from '../../shared/text-field';
 
 @Component({
   selector: 'app-access',
-  imports: [ReactiveFormsModule, HasPermission],
+  imports: [
+    ReactiveFormsModule,
+    HasPermission,
+    MatButtonModule,
+    CheckboxField,
+    TextField,
+    SelectField,
+    PageState,
+    RecordList,
+    RecordRow,
+    SectionBlock,
+  ],
   templateUrl: './access.html',
 })
 export class Access {
@@ -34,7 +55,9 @@ export class Access {
   private readonly confirm = inject(ConfirmService);
 
   readonly status = signal<'loading' | 'ready' | 'error'>('loading');
-  readonly busy = signal<string | null>(null);
+  readonly refreshing = signal(false);
+  readonly refreshError = signal(false);
+  readonly busy = signal<ReadonlySet<string>>(new Set());
   readonly users = signal<readonly UserSummary[]>([]);
   readonly teams = signal<{ id: string; name: string }[]>([]);
   readonly roles = signal<readonly RoleSummary[]>([]);
@@ -70,9 +93,91 @@ export class Access {
     void this.load();
   }
 
+  isBusy(key: string): boolean {
+    return this.busy().has(key);
+  }
+
+  fieldError(control: AbstractControl, messages: Record<string, string>): string {
+    return controlError(control, messages);
+  }
+
+  canManageUsers(): boolean {
+    return this.permissions.hasPermission('access.users.manage');
+  }
+
+  formatTime(value: string): string {
+    return formatTimestamp(value);
+  }
+
+  editingRoleName(): string {
+    const id = this.editingRoleId();
+    return this.roles().find((role) => role.id === id)?.name ?? '';
+  }
+
+  permissionGroups(): { module: string; items: PermissionCatalogItem[] }[] {
+    const groups: { module: string; items: PermissionCatalogItem[] }[] = [];
+    for (const item of this.catalog()) {
+      const existing = groups.find((group) => group.module === item.module);
+      if (existing) {
+        existing.items.push(item);
+      } else {
+        groups.push({ module: item.module, items: [item] });
+      }
+    }
+    return groups;
+  }
+
+  roleOptions(): SelectOption[] {
+    return [{ value: '', label: 'No role yet' }, ...this.roles().map((role) => ({ value: role.id, label: role.name }))];
+  }
+
+  teamOptions(): SelectOption[] {
+    return [{ value: '', label: 'Select a team' }, ...this.teams().map((team) => ({ value: team.id, label: team.name }))];
+  }
+
+  userOptions(): SelectOption[] {
+    return [{ value: '', label: 'Select a user' }, ...this.users().map((user) => ({ value: user.id, label: user.displayName }))];
+  }
+
+  permissionOptions(): SelectOption[] {
+    return [
+      { value: '', label: 'Choose a permission' },
+      ...this.catalog().map((item) => ({ value: item.code, label: `${item.displayName} (${item.code})` })),
+    ];
+  }
+
+  grantUserLabel(userId: string): string {
+    return this.users().find((user) => user.id === userId)?.displayName ?? userId;
+  }
+
+  setCode(code: string, checked: boolean): void {
+    const current = this.selectedCodes();
+    if (checked) {
+      this.selectedCodes.set(current.includes(code) ? current : [...current, code]);
+      return;
+    }
+
+    this.selectedCodes.set(current.filter((item) => item !== code));
+  }
+
+  editRole(role: RoleSummary): void {
+    this.editingRoleId.set(role.id);
+    this.roleForm.setValue({ name: role.name, description: role.description ?? '' });
+    this.selectedCodes.set(role.permissionCodes);
+  }
+
+  cancelRole(): void {
+    if (this.isBusy('role')) {
+      return;
+    }
+
+    this.editingRoleId.set(null);
+    this.selectedCodes.set([]);
+    this.roleForm.reset({ name: '', description: '' });
+  }
+
   async load(): Promise<void> {
-    this.status.set('loading');
-    try {
+    await runLoad(this.status, this.refreshing, this.refreshError, async () => {
       const tasks: Promise<void>[] = [];
       if (this.permissions.hasPermission('access.users.manage')) {
         tasks.push(this.loadUsers());
@@ -99,28 +204,18 @@ export class Access {
       }
 
       await Promise.all(tasks);
-      this.status.set('ready');
-    } catch {
-      this.status.set('error');
-    }
-  }
-
-  toggleCode(code: string): void {
-    const current = this.selectedCodes();
-    this.selectedCodes.set(current.includes(code) ? current.filter((item) => item !== code) : [...current, code]);
-  }
-
-  editRole(role: RoleSummary): void {
-    this.editingRoleId.set(role.id);
-    this.roleForm.setValue({ name: role.name, description: role.description ?? '' });
-    this.selectedCodes.set(role.permissionCodes);
+    });
   }
 
   async createUser(): Promise<void> {
     this.feedback.clear();
+    this.userForm.markAllAsTouched();
     if (this.userForm.invalid) {
-      this.userForm.markAllAsTouched();
-      this.feedback.error('Enter an email, a display name, and a password.');
+      focusFirstInvalid([
+        { control: this.userForm.controls.email, id: 'user-email' },
+        { control: this.userForm.controls.displayName, id: 'user-name' },
+        { control: this.userForm.controls.password, id: 'user-password' },
+      ]);
       return;
     }
 
@@ -173,9 +268,12 @@ export class Access {
 
   async createTeam(): Promise<void> {
     this.feedback.clear();
-    if (this.teamForm.invalid) {
-      this.teamForm.markAllAsTouched();
-      this.feedback.error('Enter a team name.');
+    this.teamForm.markAllAsTouched();
+    if (this.teamForm.invalid || !this.teamForm.controls.name.value.trim()) {
+      if (!this.teamForm.controls.name.value.trim()) {
+        this.teamForm.controls.name.setErrors({ required: true });
+      }
+      focusFirstInvalid([{ control: this.teamForm.controls.name, id: 'team-name' }]);
       return;
     }
 
@@ -194,17 +292,23 @@ export class Access {
 
   async addMember(): Promise<void> {
     this.feedback.clear();
+    this.memberForm.markAllAsTouched();
     if (this.memberForm.invalid) {
-      this.memberForm.markAllAsTouched();
-      this.feedback.error('Select a team and a user.');
+      focusFirstInvalid([
+        { control: this.memberForm.controls.teamId, id: 'member-team' },
+        { control: this.memberForm.controls.userId, id: 'member-user' },
+      ]);
       return;
     }
 
     const value = this.memberForm.getRawValue();
+    const user = this.users().find((item) => item.id === value.userId);
+    const team = this.teams().find((item) => item.id === value.teamId);
     await runBusy(this.busy, 'member', async () => {
       try {
         await firstValueFrom(this.http.post(`${environment.apiUrl}/access/teams/${value.teamId}/members`, { userId: value.userId }));
-        this.feedback.success('The user was added to the team.');
+        this.memberForm.reset({ teamId: '', userId: '' });
+        this.feedback.success(`${user?.displayName ?? 'The user'} was added to ${team?.name ?? 'the team'}.`);
       } catch (error) {
         this.feedback.error(problemMessage(error, 'The user could not be added to the team.'));
       }
@@ -213,9 +317,12 @@ export class Access {
 
   async saveRole(): Promise<void> {
     this.feedback.clear();
-    if (this.roleForm.invalid) {
-      this.roleForm.markAllAsTouched();
-      this.feedback.error('Enter a role name.');
+    this.roleForm.markAllAsTouched();
+    if (this.roleForm.invalid || !this.roleForm.controls.name.value.trim()) {
+      if (!this.roleForm.controls.name.value.trim()) {
+        this.roleForm.controls.name.setErrors({ required: true });
+      }
+      focusFirstInvalid([{ control: this.roleForm.controls.name, id: 'role-name' }]);
       return;
     }
 
@@ -244,6 +351,36 @@ export class Access {
     });
   }
 
+  async grant(): Promise<void> {
+    this.feedback.clear();
+    this.grantForm.markAllAsTouched();
+    if (this.grantForm.invalid) {
+      focusFirstInvalid([
+        { control: this.grantForm.controls.userId, id: 'grant-user' },
+        { control: this.grantForm.controls.permissionCode, id: 'grant-permission' },
+        { control: this.grantForm.controls.minutes, id: 'grant-minutes' },
+      ]);
+      return;
+    }
+
+    const value = this.grantForm.getRawValue();
+    await runBusy(this.busy, 'grant', async () => {
+      try {
+        await firstValueFrom(
+          this.http.post(`${environment.apiUrl}/access/break-glass`, {
+            userId: value.userId.trim(),
+            permissionCode: value.permissionCode,
+            minutes: Number(value.minutes),
+          }),
+        );
+        this.feedback.success('The grant was saved. It is checked by the permission API.');
+        await this.load();
+      } catch (error) {
+        this.feedback.error(problemMessage(error, 'The grant could not be saved.'));
+      }
+    });
+  }
+
   private async loadUsers(): Promise<void> {
     const users = await firstValueFrom(this.http.get<UserListResponse>(`${environment.apiUrl}/access/users`));
     this.users.set(users.users);
@@ -262,32 +399,6 @@ export class Access {
   private async loadCatalog(): Promise<void> {
     const catalog = await firstValueFrom(this.http.get<PermissionCatalogResponse>(`${environment.apiUrl}/permissions`));
     this.catalog.set(catalog.permissions);
-  }
-
-  async grant(): Promise<void> {
-    this.feedback.clear();
-    if (this.grantForm.invalid) {
-      this.grantForm.markAllAsTouched();
-      this.feedback.error('Enter a user, a catalog permission, and 5 to 60 minutes.');
-      return;
-    }
-
-    const value = this.grantForm.getRawValue();
-    await runBusy(this.busy, 'grant', async () => {
-      try {
-        await firstValueFrom(
-          this.http.post(`${environment.apiUrl}/access/break-glass`, {
-            userId: value.userId.trim(),
-            permissionCode: value.permissionCode,
-            minutes: value.minutes,
-          }),
-        );
-        this.feedback.success('The grant was saved. It is checked by the permission API.');
-        await this.load();
-      } catch (error) {
-        this.feedback.error(problemMessage(error, 'The grant could not be saved.'));
-      }
-    });
   }
 
   private async loadGrants(): Promise<void> {

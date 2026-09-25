@@ -1,22 +1,22 @@
 <h1>My access</h1>
 <p>These permissions decide which pages and actions this account can use.</p>
 @if (status() === 'loading') {
-  <p>Loading permissions.</p>
+  <div aria-busy="true">
+    <app-page-state kind="loading" message="Loading permissions." />
+  </div>
 } @else if (status() === 'error') {
-  <p>Permissions could not be loaded.</p>
-  <button type="button" (click)="load()">Retry</button>
+  <app-page-state kind="error" message="Permissions could not be loaded." (retry)="load()" />
 } @else if (permissions().length === 0) {
-  <p>This account has no permissions. Ask an administrator to assign a role.</p>
+  <app-page-state kind="empty" message="This account has no permissions. Ask an administrator to assign a role." />
 } @else {
   @if (homePath() !== '/permissions') {
-    <p><a [routerLink]="homePath()">Continue to {{ homeName() }}</a></p>
+    <p><a class="text-neutral-900" [routerLink]="homePath()">Continue to {{ homeName() }}</a></p>
   }
   @for (group of groups(); track group.module) {
-    <section>
-      <h2>{{ group.module }}</h2>
-      <ul>
+    <app-section-block [heading]="group.module">
+      <ul class="m-0 list-none p-0">
         @for (item of group.items; track item.code) {
-          <li>
+          <li class="border-b border-neutral-200 py-3 last:border-b-0">
             {{ item.displayName }}
             @if (item.description) {
               <span>— {{ item.description }}</span>
@@ -24,10 +24,10 @@
             @if (item.opens) {
               <span>Opens {{ item.opens }}.</span>
             }
-            <code class="permission-code">{{ item.code }}</code>
+            <code class="mt-1 block text-sm text-neutral-600">{{ item.code }}</code>
           </li>
         }
       </ul>
-    </section>
+    </app-section-block>
   }
 }

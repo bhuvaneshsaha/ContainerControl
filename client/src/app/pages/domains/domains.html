@@ -1,20 +1,36 @@
-<h1>Allowed domains</h1>
+<div class="mb-4 flex flex-wrap items-baseline gap-3">
+  <h1 class="m-0">Allowed domains</h1>
+  @if (status() === 'ready' && refreshing()) {
+    <p class="m-0 text-sm text-neutral-600" role="status">Refreshing…</p>
+  }
+</div>
 <p>DNS records stay at the provider. This list only allows hostnames under a name that already points at the public IP.</p>
-<form [formGroup]="form" (ngSubmit)="save()">
-  <label for="domain-name">Domain</label>
-  <input id="domain-name" formControlName="name" />
-  <button type="submit" [disabled]="busy() !== null">{{ busy() === 'save' ? 'Saving…' : 'Save domain' }}</button>
-</form>
 @if (status() === 'loading') {
-  <p>Loading allowed domains.</p>
+  <div aria-busy="true">
+    <app-page-state kind="loading" message="Loading allowed domains." />
+  </div>
 } @else if (status() === 'error') {
-  <p>Allowed domains could not be loaded.</p>
-} @else if (domains().length === 0) {
-  <p>No domains are allowed yet.</p>
+  <app-page-state kind="error" message="Allowed domains could not be loaded." (retry)="load()" />
 } @else {
-  <ul>
-    @for (domain of domains(); track domain.id) {
-      <li>{{ domain.name }}</li>
-    }
-  </ul>
+  @if (refreshError()) {
+    <app-page-state kind="error" message="Allowed domains could not be loaded." (retry)="load()" />
+  }
+  @if (domains().length === 0) {
+    <app-page-state kind="empty" message="No domains are allowed yet. Use New domain to add one." />
+  } @else {
+    <app-record-list>
+      @for (domain of domains(); track domain.id) {
+        <app-record-row>
+          <span recordTitle>{{ domain.name }}</span>
+        </app-record-row>
+      }
+    </app-record-list>
+  }
+  <details class="mt-8 max-w-xl rounded-lg border border-neutral-300 bg-white p-4">
+    <summary class="cursor-pointer font-medium">New domain</summary>
+    <form class="mt-4" [formGroup]="form" (ngSubmit)="save()">
+      <app-text-field label="Domain" inputId="domain-name" formControlName="name" [error]="fieldError(form.controls.name, { required: 'Enter a domain name.' })" />
+      <button mat-flat-button type="submit" [disabled]="isBusy('save')" [attr.aria-busy]="isBusy('save')">{{ isBusy('save') ? 'Saving…' : 'Save domain' }}</button>
+    </form>
+  </details>
 }
