@@ -53,7 +53,7 @@ These stay outside the API. [Production setup](production-setup.md) is the check
 - Create the registry user or access key in ACR, ECR, Docker Hub, or Harbor before saving the connection.
 - Provision data-tier databases. Compose will not run those images.
 - Buy a commercial certificate when Let's Encrypt cannot issue one. Traefik's ACME resolver covers public hostnames only. This wave does not implement `edge.certs.manage`. The operator installs that certificate outside the API.
-- Rotate the Docker host client certificate on the host, then update the Infisical reference.
+- Rotate the Docker host client certificate, key, and CA, then update the Infisical or path reference. The product does not store PEM.
 
 ## Deferred
 

@@ -18,7 +18,7 @@ The [threat model](threat-model.md) records what the API enforces. Confirm each 
 8. Create the registry credential in ACR, ECR, Docker Hub, or Harbor. `registry:2` is not a connection type. Check: the registry accepts that credential. Saving it in ContainerControl is the next section.
 9. Provision a data-tier database on its own VM. Check: the database accepts connections from the Docker host. Add the connection string later as a secret. Compose database images are rejected.
 10. When Let's Encrypt cannot issue a certificate, obtain one from the vendor and install it yourself. Traefik's ACME resolver, controlled by `EDGE_ACME_EMAIL` (`Edge:AcmeEmail`), covers public hostnames only. When that email is set, prepare emits `websecure`, `tls=true`, and `tls.certresolver=le` on the same validated Host() router, and HTTP redirects to HTTPS. With the email unset, routers stay on `web` only ([ADR 0016](adr/0016-traefik-websecure-engine-mtls-and-socket.md), PLAT-01). The product does not buy or install a commercial certificate. This wave does not implement `edge.certs.manage`.
-11. When the Docker host client certificate must change, rotate it on the host and update the Infisical reference the host uses. The product does not rotate that certificate.
+11. When the Docker host client material must change, rotate the client certificate, key, and CA, then update the Infisical or path references on the host row. The product does not store PEM and does not rotate that material.
 
 ## Nested Docker host storage driver
 
