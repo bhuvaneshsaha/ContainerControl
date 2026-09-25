@@ -1,4 +1,4 @@
-# ADR 0012: Deploy leases are per application and environment
+# ADR 0013: Deploy leases are per application and environment
 
 ## Status
 Accepted
