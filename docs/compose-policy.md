@@ -43,7 +43,7 @@ Rejected before any container is created:
 - `privileged`
 - `network_mode: host`, `pid: host`, `ipc: host`
 - `cap_add`, `devices`, `build`
-- bind mounts and the Docker socket
+- bind mounts and the Docker socket. Tenant services cannot mount it. Traefik's host socket is [ADR 0016](adr/0016-traefik-websecure-engine-mtls-and-socket.md)
 - database images, unless that application has `AllowDatabaseImages` set
 - a service hostname that is not a DNS name, or two services that claim the same public hostname
 

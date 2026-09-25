@@ -11,13 +11,13 @@ The [threat model](threat-model.md) records what the API enforces. Confirm each 
 1. Create the Hyper-V Linux management VM and the separate Linux Docker host. Check: both VMs boot and the management VM is not a tenant app host.
 2. Assign the static public IP and forward ports 80 and 443 to the Docker host. Check: a request to that IP reaches the host. Keep those ports forwarded only to Traefik once that container exists.
 3. At the DNS provider, point the domain and its wildcard at that IP. A new apex domain is also created at the provider. ContainerControl does not write DNS records. Check: the wildcard resolves to the public IP before you add the domain in the product.
-4. Install Docker Engine on the Docker host and leave it running with mutual TLS. Do not install Docker Desktop and do not publish the raw socket. Check: the Engine answers on the management VLAN.
+4. Install Docker Engine on the Docker host. Do not install Docker Desktop and do not publish the raw socket. A `tcp://` endpoint outside Development needs client certificate material in Infisical, on the host certificate reference. Cleartext `tcp://` is rejected. `unix` and `npipe` do not need that material. Development may keep cleartext `tcp://` for a nested or demo Engine. See [ADR 0016](adr/0016-traefik-websecure-engine-mtls-and-socket.md). That check is PLAT-02 and is not in the API until that story. Check: the Engine answers on the management VLAN.
 5. Start ContainerControl and PostgreSQL on the management VM with the production connection string in `ConnectionStrings__Database`. Check: `/health/ready` reports the database healthy.
 6. Set `CONTAINERCONTROL_ADMIN_EMAIL`, `CONTAINERCONTROL_ADMIN_PASSWORD`, and optionally `CONTAINERCONTROL_ADMIN_DISPLAY_NAME` before the first boot if the database has no users. Check: that account can sign in. The password is not stored in git.
 7. Create a separate Infisical machine identity for dev, staging, and prod. Put `INFISICAL_SITE_URL` and each environment's `INFISICAL_*_CLIENT_ID`, `INFISICAL_*_CLIENT_SECRET`, and `INFISICAL_*_PROJECT_ID` on the management host. Check: those variables are present on the host and absent from git. ContainerControl writes secret values through the Infisical API. It does not create the identity.
 8. Create the registry credential in ACR, ECR, Docker Hub, or Harbor. `registry:2` is not a connection type. Check: the registry accepts that credential. Saving it in ContainerControl is the next section.
 9. Provision a data-tier database on its own VM. Check: the database accepts connections from the Docker host. Add the connection string later as a secret. Compose database images are rejected.
-10. When Let's Encrypt cannot issue a certificate, obtain one from the vendor. Traefik's ACME resolver, controlled by `EDGE_ACME_EMAIL`, covers public hostnames only. The product does not buy or install a commercial certificate for you.
+10. When Let's Encrypt cannot issue a certificate, obtain one from the vendor. Traefik's ACME resolver, controlled by `EDGE_ACME_EMAIL`, covers public hostnames only. When that email is set, or an explicit HTTPS edge configuration is present, prepare enables `websecure` and TLS on public Host routers ([ADR 0016](adr/0016-traefik-websecure-engine-mtls-and-socket.md), PLAT-01). The product does not buy or install a commercial certificate for you.
 11. When the Docker host client certificate must change, rotate it on the host and update the Infisical reference the host uses. The product does not rotate that certificate.
 
 ## Nested Docker host storage driver
@@ -27,7 +27,7 @@ If the Docker host's data root is already an overlay filesystem — a nested VM,
 ## Steps you finish in ContainerControl
 
 1. Sign in and create real users. Assign roles built from the permission catalog. Check: a developer cannot call `GET /platform/hosts`.
-2. Register the Docker host and ping the Engine. Prepare the host so the `edge` network and the Traefik container exist, or start the Traefik Compose profile on that host. Do not do both against the same ports and container name. If prepare cannot reach the Engine, the API returns 502 and does not claim the container was created.
+2. Register the Docker host and ping the Engine. Prepare the host so the `edge` network and the Traefik container exist, or start the Traefik Compose profile on that host. Do not do both against the same ports and container name. When `EDGE_ACME_EMAIL` is set, or an explicit HTTPS edge configuration is present, prepare enables Traefik `websecure` and TLS on public Host routers. HTTP may redirect to HTTPS. Without that configuration, the HTTP `web` entrypoint is enough, including a localhost demo. See [ADR 0016](adr/0016-traefik-websecure-engine-mtls-and-socket.md). The TLS stamp is PLAT-01 and is not in prepare until that story. If prepare cannot reach the Engine, the API returns 502 and does not claim the container was created.
 3. Add allowed domains that already resolve to the public IP.
 4. Save the registry connection. The password or ECR keys are written to Infisical. PostgreSQL stores the path. An ECR token refreshes before it expires.
 5. On the Capacity page, save each team's CPU, memory, and storage quota, then read host capacity from the Engine. A deploy is rejected when a service omits those limits or the sum exceeds the quota.
@@ -45,6 +45,7 @@ If the Docker host's data root is already an overlay filesystem — a nested VM,
 ## Do not
 
 - Do not install Docker Desktop on the server or publish the Docker socket.
+- Do not publish the raw Docker socket to tenant containers. Compose rejects that mount. Traefik uses the host local socket. A socket proxy is not part of v1. See [ADR 0016](adr/0016-traefik-websecure-engine-mtls-and-socket.md).
 - Do not give developers a VM login, a Docker socket, or the Infisical machine credential.
 - Do not put secret values in git, compose files, or PostgreSQL.
 - Do not turn on self-registration or run the Development user seed in production.

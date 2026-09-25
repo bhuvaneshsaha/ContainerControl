@@ -31,11 +31,21 @@ Secret and registry values are written to Infisical. A failed deploy is stored a
 
 Live logs use SignalR at `/hubs/logs`. The hub requires `runtime.logs.read` and team membership. The stream is the Engine log API, not a separate log store.
 
+## Decided mitigations
+
+These rules are accepted in [ADR 0016](adr/0016-traefik-websecure-engine-mtls-and-socket.md). Hyper-V, DNS, and Infisical identity setup stay with the operator, in the list below.
+
+- Public HTTPS. When `EDGE_ACME_EMAIL` is set, or an explicit HTTPS edge configuration is present, prepare enables Traefik `websecure` and stamps TLS on the public Host routers for exposed services. HTTP may redirect to HTTPS in that mode. A local or development edge with no ACME email and no HTTPS configuration keeps the HTTP `web` entrypoint. The product does not write DNS and does not buy a commercial certificate.
+- Engine `tcp://`. Outside Development, registration and connect require client certificate material from Infisical, using the host certificate reference. Cleartext `tcp://` is rejected with a fixed message that does not include the address. `unix` and `npipe` stay on the local trust boundary. Development may register cleartext `tcp://` for a nested or demo Engine.
+- Traefik socket. Traefik v1 uses the Docker provider and the host local socket, as in [ADR 0004](adr/0004-one-public-ip-traefik-labels.md). Compose rejects a Docker socket mount on a tenant service. A socket proxy in front of Traefik is deferred and is not a v1 control.
+
+The `websecure` TLS stamp and the `tcp://` certificate check are the next API change. This note records them as accepted mitigations. The current build does not enforce them yet. The tenant socket rejection is already enforced.
+
 ## Operator work the product cannot do
 
 These stay outside the API. [Production setup](production-setup.md) is the checklist.
 
-- Create the Hyper-V VMs, install Docker Engine, and keep mutual TLS on the Engine. Do not publish the raw socket.
+- Create the Hyper-V VMs and install Docker Engine. Do not publish the raw socket. Client material for a `tcp://` Engine is the decided mitigation above; the operator still places that certificate in Infisical.
 - Forward ports 80 and 443 to Traefik and create DNS records at the provider. The product does not write DNS.
 - Create the Infisical machine identities and keep each environment's credential on the management host.
 - Create the registry user or access key in ACR, ECR, Docker Hub, or Harbor before saving the connection.
@@ -45,4 +55,4 @@ These stay outside the API. [Production setup](production-setup.md) is the check
 
 ## Deferred
 
-Entra ID, Windows container hosts, per-app DNS writes, a long-term log store, auto-scaling, blue/green, canary, alerting, cost dashboards, and a template marketplace are not implemented. The control plane is one management VM. A second Docker host does not receive public traffic by itself.
+Entra ID, Windows container hosts, per-app DNS writes, a long-term log store, auto-scaling, blue/green, canary, alerting, cost dashboards, and a template marketplace are not implemented. A dedicated Docker socket proxy for Traefik is deferred past v1 ([ADR 0016](adr/0016-traefik-websecure-engine-mtls-and-socket.md)). The control plane is one management VM. A second Docker host does not receive public traffic by itself.
