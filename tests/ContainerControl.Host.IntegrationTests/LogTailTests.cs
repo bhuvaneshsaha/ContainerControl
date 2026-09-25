@@ -58,7 +58,7 @@ public class LogTailTests
 
     private static RuntimeInspector Inspector(bool member, Guid appId, FakeEngine engine)
     {
-        var app = new WorkloadSnapshot(appId, Guid.NewGuid(), Guid.NewGuid(), "welcome", "dev", null, null, null, null, null, false, false, "running");
+        var app = new WorkloadSnapshot(appId, Guid.NewGuid(), Guid.NewGuid(), "welcome", "dev", null, null, null, null, null, false, false, "running", false);
         return new RuntimeInspector(
             new FakeApps(app),
             new FakeHosts(),

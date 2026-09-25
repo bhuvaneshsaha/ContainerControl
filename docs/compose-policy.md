@@ -23,6 +23,10 @@ Rejected before any container is created:
 - `network_mode: host`, `pid: host`, `ipc: host`
 - `cap_add`, `devices`, `build`
 - bind mounts and the Docker socket
-- database images (`postgres`, `mysql`, `mariadb`, `mongo`, `mongodb`, `mssql`, `sqlserver`, and the other data-tier names in `ComposePolicy`)
+- database images, unless that application has `AllowDatabaseImages` set
 
-Redis, Valkey, and Memcached are caches, not database images. A single-container app can omit the compose file and set an image instead. Exposed services also join the `edge` network. Every service joins that app's private network with an alias equal to the compose service name.
+`AllowDatabaseImages` defaults to false. Existing applications stay false. There is no global switch that allows database images. `ComposePolicy` matches product names as whole `-` / `_` tokens in the image name and repository path (the registry host is ignored), so official tags and common vendor tags are rejected together (`postgresql`, `postgis`, `pgvector`, `timescaledb`, `mysql-server`, `mariadb-galera`, `mcr.microsoft.com/mssql/server`, `azure-sql-edge`, Oracle Database editions, and the other data-tier names in `ComposePolicy`). Oracle Linux and client images such as Instant Client are not database images.
+
+A caller with `apps.write` can create and update an application while the flag stays false, and can turn the flag off. Turning it on for that application also requires `platform.settings.manage`. On update, omitting the field leaves the stored value unchanged. Deploy then skips only the database-image check. Privileged mode, host networking, bind mounts, and the other rejections still apply. Changing the flag writes `apps.database-images.allowed` or `apps.database-images.blocked`.
+
+Redis, Valkey, and Memcached are caches, not database images, whether or not the application allows database images. A single-container app can omit the compose file and set an image instead. Exposed services also join the `edge` network. Every service joins that app's private network with an alias equal to the compose service name.

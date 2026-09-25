@@ -57,6 +57,7 @@ describe('Apps', () => {
       hostname: 'http://nginx.apps.example.com/',
       exposed: false,
       requiresApproval: false,
+      allowDatabaseImages: false,
     };
 
     const pending = fixture.componentInstance.act(app, 'deploy');
@@ -87,6 +88,7 @@ describe('Apps', () => {
         hostname: null,
         exposed: false,
         requiresApproval: false,
+        allowDatabaseImages: false,
       },
     ]);
     TestBed.inject(PermissionService).setPermissions(['apps.read']);
@@ -114,6 +116,7 @@ describe('Apps', () => {
       hostname: null,
       exposed: false,
       requiresApproval: false,
+      allowDatabaseImages: false,
     };
 
     const pending = fixture.componentInstance.act(app, 'stop');
@@ -135,6 +138,7 @@ describe('Apps', () => {
       hostname: null,
       exposed: false,
       requiresApproval: true,
+      allowDatabaseImages: false,
     };
     fixture.componentInstance.status.set('ready');
     fixture.componentInstance.apps.set([app]);
@@ -145,5 +149,69 @@ describe('Apps', () => {
     fixture.detectChanges();
     await fixture.whenStable();
     expect(fixture.nativeElement.textContent).toContain('Approve');
+  });
+
+  it('hides the database-image override unless the caller can manage platform settings', async () => {
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('#app-database')).toBeNull();
+
+    TestBed.inject(PermissionService).setPermissions(['apps.write', 'platform.settings.manage']);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const box = fixture.nativeElement.querySelector('#app-database') as HTMLInputElement;
+    expect(box).not.toBeNull();
+    expect(box.checked).toBe(false);
+    expect(fixture.nativeElement.textContent).toContain('app host');
+  });
+
+  it('sends the database-image override only when the operator turns it on', async () => {
+    const http = TestBed.inject(HttpTestingController);
+    TestBed.inject(PermissionService).setPermissions(['apps.write', 'platform.settings.manage']);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.componentInstance.form.setValue({
+      name: 'billing',
+      teamId: 'team',
+      hostId: 'host',
+      environment: 'dev',
+      composeYaml: 'services:\n  web:\n    image: nginx:1.27\n',
+      internalPort: '',
+      hostname: '',
+      exposed: false,
+      requireApproval: false,
+      allowDatabaseImages: true,
+    });
+
+    const pending = fixture.componentInstance.create();
+    const request = http.expectOne(`${environment.apiUrl}/apps`);
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body.allowDatabaseImages).toBe(true);
+    request.flush({ id: '97f94c8a-3d8e-49ee-9397-2a358eb9a636' });
+    await fixture.whenStable();
+    http.expectOne(`${environment.apiUrl}/apps`).flush({ apps: [] });
+    http.expectOne(`${environment.apiUrl}/access/teams`).flush({ teams: [] });
+    http.expectOne(`${environment.apiUrl}/platform/hosts/choices`).flush({ hosts: [] });
+    await pending;
+  });
+
+  it('shows when an application is allowed to run database images', () => {
+    fixture.componentInstance.status.set('ready');
+    fixture.componentInstance.apps.set([
+      {
+        id: '97f94c8a-3d8e-49ee-9397-2a358eb9a636',
+        teamId: 'team',
+        hostId: 'host',
+        name: 'ledger',
+        environment: 'dev',
+        image: null,
+        status: 'registered',
+        hostname: null,
+        exposed: false,
+        requiresApproval: false,
+        allowDatabaseImages: true,
+      },
+    ]);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Database images allowed');
   });
 });

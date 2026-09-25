@@ -26,6 +26,8 @@ public sealed class ContainerApp
 
     public bool RequiresApproval { get; set; }
 
+    public bool AllowDatabaseImages { get; set; }
+
     public string Status { get; set; } = "registered";
 
     public DateTimeOffset CreatedAtUtc { get; set; }
@@ -44,7 +46,8 @@ public sealed record WorkloadSnapshot(
     string? Hostname,
     bool Exposed,
     bool RequiresApproval,
-    string Status);
+    string Status,
+    bool AllowDatabaseImages);
 
 public sealed record DesiredState(
     string? Image,

@@ -100,6 +100,7 @@ public sealed class WorkloadAdmin : IWorkloadStore, ISecretCatalog
         string? hostname,
         bool exposed,
         bool requiresApproval,
+        bool allowDatabaseImages,
         CancellationToken cancellationToken)
     {
         if (!await CanSeeAsync(teamId, cancellationToken))
@@ -136,12 +137,18 @@ public sealed class WorkloadAdmin : IWorkloadStore, ISecretCatalog
             Hostname = canonicalHostname,
             Exposed = exposed,
             RequiresApproval = ApprovalPolicy.Required(environment, requiresApproval),
+            AllowDatabaseImages = allowDatabaseImages,
             Status = "registered",
             CreatedAtUtc = _clock.UtcNow
         };
         _db.Apps.Add(app);
         await _db.SaveChangesAsync(cancellationToken);
         await _audit.WriteAsync(new AuditRecord("apps.created", "application", app.Id.ToString(), _currentUser.UserId), cancellationToken);
+        if (allowDatabaseImages)
+        {
+            await WriteDatabaseImageAuditAsync(app.Id, allowed: true, cancellationToken);
+        }
+
         return (true, app.Id, null);
     }
 
@@ -154,6 +161,7 @@ public sealed class WorkloadAdmin : IWorkloadStore, ISecretCatalog
         string? hostname,
         bool exposed,
         bool requiresApproval,
+        bool allowDatabaseImages,
         CancellationToken cancellationToken)
     {
         var app = await _db.Apps.SingleOrDefaultAsync(item => item.Id == id, cancellationToken);
@@ -177,9 +185,16 @@ public sealed class WorkloadAdmin : IWorkloadStore, ISecretCatalog
         app.ComposeYaml = string.IsNullOrWhiteSpace(composeYaml) ? null : composeYaml;
         app.InternalPort = internalPort;
         app.Hostname = canonicalHostname;
+        var databaseImagesChanged = app.AllowDatabaseImages != allowDatabaseImages;
         app.Exposed = exposed;
         app.RequiresApproval = ApprovalPolicy.Required(app.Environment, requiresApproval);
+        app.AllowDatabaseImages = allowDatabaseImages;
         await _db.SaveChangesAsync(cancellationToken);
+        if (databaseImagesChanged)
+        {
+            await WriteDatabaseImageAuditAsync(app.Id, allowDatabaseImages, cancellationToken);
+        }
+
         return (true, null);
     }
 
@@ -302,6 +317,15 @@ public sealed class WorkloadAdmin : IWorkloadStore, ISecretCatalog
         return true;
     }
 
+    private Task WriteDatabaseImageAuditAsync(Guid appId, bool allowed, CancellationToken cancellationToken) =>
+        _audit.WriteAsync(
+            new AuditRecord(
+                allowed ? "apps.database-images.allowed" : "apps.database-images.blocked",
+                "application",
+                appId.ToString(),
+                _currentUser.UserId),
+            cancellationToken);
+
     private async Task<bool> CanSeeAsync(Guid teamId, CancellationToken cancellationToken)
     {
         if (_currentUser.UserId is null)
@@ -326,5 +350,6 @@ public sealed class WorkloadAdmin : IWorkloadStore, ISecretCatalog
             app.Hostname,
             app.Exposed,
             app.RequiresApproval,
-            app.Status);
+            app.Status,
+            app.AllowDatabaseImages);
 }

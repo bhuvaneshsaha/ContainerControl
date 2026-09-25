@@ -51,6 +51,7 @@ export class Apps {
     hostname: new FormControl('', { nonNullable: true }),
     exposed: new FormControl(false, { nonNullable: true }),
     requireApproval: new FormControl(false, { nonNullable: true }),
+    allowDatabaseImages: new FormControl(false, { nonNullable: true }),
   });
 
   constructor() {

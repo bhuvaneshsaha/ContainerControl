@@ -193,8 +193,8 @@ public sealed class DeployService
         }
 
         var plan = string.IsNullOrWhiteSpace(app.ComposeYaml)
-            ? ComposePolicy.FromImage(app.Image ?? string.Empty, ReadCommand(app.CommandJson), app.Exposed, app.InternalPort)
-            : ComposePolicy.Parse(app.ComposeYaml);
+            ? ComposePolicy.FromImage(app.Image ?? string.Empty, ReadCommand(app.CommandJson), app.Exposed, app.InternalPort, app.AllowDatabaseImages)
+            : ComposePolicy.Parse(app.ComposeYaml, app.AllowDatabaseImages);
         if (!plan.Accepted)
         {
             await RecordAsync(app, "rejected", string.Join(" ", plan.Errors), cancellationToken);
