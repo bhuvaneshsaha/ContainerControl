@@ -58,9 +58,9 @@ public sealed class HostRegistry : IDockerHostLookup
             return (false, null, "Enter a host name and an Engine endpoint.");
         }
 
-        if (!Uri.TryCreate(endpoint.Trim(), UriKind.Absolute, out _))
+        if (!EngineConnectUri.TryParse(endpoint, out _, out var endpointError))
         {
-            return (false, null, "The Engine endpoint must be an absolute URI, such as unix:///var/run/docker.sock.");
+            return (false, null, endpointError);
         }
 
         var host = new DockerHost
