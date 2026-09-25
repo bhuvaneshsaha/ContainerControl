@@ -1,3 +1,4 @@
+using ContainerControl.Modules.Platform.Alerts;
 using ContainerControl.Modules.Platform.Hosts;
 using ContainerControl.Modules.Platform.Quotas;
 using ContainerControl.SharedKernel.Persistence;
@@ -19,6 +20,8 @@ public sealed class PlatformDbContext : DbContext
     public DbSet<TeamQuota> Quotas => Set<TeamQuota>();
 
     public DbSet<HostCapacityReading> Capacity => Set<HostCapacityReading>();
+
+    public DbSet<AlertSetting> AlertSettings => Set<AlertSetting>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -52,6 +55,14 @@ public sealed class PlatformDbContext : DbContext
         {
             entity.ToTable("host_capacity");
             entity.HasKey(reading => reading.HostId);
+        });
+        modelBuilder.Entity<AlertSetting>(entity =>
+        {
+            entity.ToTable("alert_settings");
+            entity.HasKey(setting => setting.Id);
+            entity.Property(setting => setting.Id).ValueGeneratedNever();
+            entity.Property(setting => setting.WebhookUrl).HasMaxLength(2000);
+            entity.Property(setting => setting.Recipients).HasMaxLength(2000);
         });
     }
 }

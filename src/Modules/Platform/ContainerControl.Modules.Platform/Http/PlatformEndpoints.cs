@@ -1,3 +1,4 @@
+using ContainerControl.Modules.Platform.Alerts;
 using ContainerControl.Modules.Platform.Hosts;
 using ContainerControl.Modules.Platform.Quotas;
 using ContainerControl.SharedKernel.Authorization;
@@ -37,6 +38,8 @@ public sealed record QuotaListResponse(IReadOnlyList<QuotaResponse> Quotas);
 public sealed record SaveQuotaRequest(long? CpuMillicores, long? MemoryBytes, long? StorageBytes);
 
 public sealed record CapacityListResponse(IReadOnlyList<CapacityRow> Hosts);
+
+public sealed record SaveAlertSettingsRequest(string? WebhookUrl, string? Recipients);
 
 public static class PlatformPermissions
 {
@@ -198,6 +201,33 @@ public static class PlatformEndpoints
             })
             .RequirePermission(PlatformPermissions.CapacityRead)
             .WithName("RecordHostCapacity")
+            .WithTags("Platform");
+
+        endpoints.MapGet("/platform/alerts", async (AlertAdmin alerts, CancellationToken cancellationToken) =>
+                Results.Ok(await alerts.GetAsync(cancellationToken)))
+            .RequirePermission("platform.settings.manage")
+            .WithName("ReadAlertSettings")
+            .WithTags("Platform")
+            .Produces<AlertSettingsView>();
+
+        endpoints.MapPut("/platform/alerts", async (
+                SaveAlertSettingsRequest? request,
+                AlertAdmin alerts,
+                CancellationToken cancellationToken) =>
+            {
+                var result = await alerts.SaveAsync(request?.WebhookUrl, request?.Recipients, cancellationToken);
+                if (!result.Ok)
+                {
+                    return Results.ValidationProblem(new Dictionary<string, string[]>
+                    {
+                        ["alerts"] = [result.Error ?? "Alert settings were not saved."]
+                    });
+                }
+
+                return Results.NoContent();
+            })
+            .RequirePermission("platform.settings.manage")
+            .WithName("SaveAlertSettings")
             .WithTags("Platform");
     }
 

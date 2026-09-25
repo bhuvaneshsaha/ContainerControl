@@ -37,6 +37,17 @@
                 <button mat-stroked-button type="button" *appHasPermission="'deploy.execute'" [disabled]="isBusy(actionKey(app, 'deploy'))" [attr.aria-busy]="isBusy(actionKey(app, 'deploy'))" (click)="act(app, 'deploy')">
                   {{ isBusy(actionKey(app, 'deploy')) ? 'Deploying…' : 'Deploy' }}
                 </button>
+                <button mat-stroked-button type="button" *appHasPermission="'deploy.execute'" [disabled]="isBusy('slot:' + app.id)" [attr.aria-busy]="isBusy('slot:' + app.id)" (click)="slotDeploy(app)">
+                  {{ isBusy('slot:' + app.id) ? 'Starting slot…' : 'Deploy beside' }}
+                </button>
+                <button mat-stroked-button type="button" *appHasPermission="'deploy.execute'" [disabled]="isBusy('swap:' + app.id)" [attr.aria-busy]="isBusy('swap:' + app.id)" (click)="swapTraffic(app)">
+                  {{ isBusy('swap:' + app.id) ? 'Swapping…' : 'Swap traffic' }}
+                </button>
+                <label class="text-sm" [attr.for]="'canary-' + app.id">Canary %</label>
+                <input [id]="'canary-' + app.id" class="w-16 rounded border border-neutral-300 px-2 py-1" type="number" min="1" max="99" step="1" [value]="canaryPercent()" (input)="setCanary($event)" />
+                <button mat-stroked-button type="button" *appHasPermission="'deploy.execute'" [disabled]="isBusy('canary:' + app.id)" [attr.aria-busy]="isBusy('canary:' + app.id)" (click)="canary(app)">
+                  {{ isBusy('canary:' + app.id) ? 'Sending…' : 'Canary' }}
+                </button>
                 @if (app.status === 'pending-approval') {
                   <button mat-stroked-button type="button" *appHasPermission="'deploy.approve'" [disabled]="isBusy(actionKey(app, 'approve'))" [attr.aria-busy]="isBusy(actionKey(app, 'approve'))" (click)="act(app, 'approve')">
                     {{ isBusy(actionKey(app, 'approve')) ? 'Approving…' : 'Approve' }}
@@ -62,12 +73,16 @@
                 <button mat-stroked-button type="button" *appHasPermission="'deploy.rollback'" [disabled]="isBusy(actionKey(app, 'rollback'))" [attr.aria-busy]="isBusy(actionKey(app, 'rollback'))" (click)="act(app, 'rollback')">
                   {{ isBusy(actionKey(app, 'rollback')) ? 'Rolling back…' : 'Rollback' }}
                 </button>
+                <button mat-stroked-button type="button" *appHasPermission="'deploy.rollback'" [disabled]="isBusy('revert:' + app.id)" [attr.aria-busy]="isBusy('revert:' + app.id)" (click)="revertTraffic(app)">
+                  {{ isBusy('revert:' + app.id) ? 'Restoring…' : 'Revert traffic' }}
+                </button>
               </app-action-cluster>
             }
             @if (can('secrets.read') || can('runtime.logs.read') || can('runtime.stats.read')) {
               <app-action-cluster label="Inspect">
                 <button mat-stroked-button type="button" *appHasPermission="'secrets.read'" [disabled]="isBusy('secrets:' + app.id)" (click)="openSecrets(app)">Secrets</button>
                 <button mat-stroked-button type="button" *appHasPermission="'runtime.logs.read'" [disabled]="isBusy('logs:' + app.id)" [attr.aria-busy]="isBusy('logs:' + app.id)" (click)="logs(app)">Logs</button>
+                <button mat-stroked-button type="button" *appHasPermission="'runtime.logs.read'" [disabled]="isBusy('stored:' + app.id)" [attr.aria-busy]="isBusy('stored:' + app.id)" (click)="storedLogs(app)">Stored logs</button>
                 <button mat-stroked-button type="button" *appHasPermission="'runtime.logs.read'" [disabled]="isBusy('live:' + app.id)" [attr.aria-busy]="isBusy('live:' + app.id)" (click)="live(app)">Live logs</button>
                 <button mat-stroked-button type="button" *appHasPermission="'runtime.stats.read'" [disabled]="isBusy('stats:' + app.id)" [attr.aria-busy]="isBusy('stats:' + app.id)" (click)="stats(app)">Stats</button>
               </app-action-cluster>

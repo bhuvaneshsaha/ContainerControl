@@ -1,3 +1,4 @@
+using ContainerControl.Modules.Platform.Alerts;
 using ContainerControl.Modules.Platform.Engine;
 using ContainerControl.Modules.Platform.Hosts;
 using ContainerControl.Modules.Platform.Persistence;
@@ -36,6 +37,9 @@ public static class PlatformModule
         services.AddScoped<IDockerHostLookup>(provider => provider.GetRequiredService<HostRegistry>());
         services.AddScoped<QuotaAdmin>();
         services.AddScoped<ITeamQuotaLookup>(provider => provider.GetRequiredService<QuotaAdmin>());
+        services.AddScoped<AlertAdmin>();
+        services.AddScoped<IAlertPublisher, AlertPublisher>();
+        services.AddHttpClient(AlertPublisher.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(5));
         return services;
     }
 }

@@ -197,7 +197,10 @@ public sealed class DockerEngineClient : IDockerEngine
         return containers.Select(container =>
         {
             var ip = container.NetworkSettings?.Networks?.Values.FirstOrDefault()?.IPAddress;
-            return new EngineContainer(container.ID, container.Names.FirstOrDefault() ?? container.ID, container.State == "running", ip);
+            IReadOnlyDictionary<string, string>? labels = container.Labels is null
+                ? null
+                : new Dictionary<string, string>(container.Labels, StringComparer.Ordinal);
+            return new EngineContainer(container.ID, container.Names.FirstOrDefault() ?? container.ID, container.State == "running", ip, labels);
         }).ToArray();
     }
 
@@ -249,6 +252,25 @@ public sealed class DockerEngineClient : IDockerEngine
             ShowStdout = true,
             ShowStderr = true,
             Tail = tail.ToString()
+        }, cancellationToken);
+        var (stdout, stderr) = await stream.ReadOutputToEndAsync(cancellationToken);
+        return stdout + stderr;
+    }
+
+    public async Task<string> ReadTimestampedLogsAsync(
+        DockerEndpoint endpoint,
+        string containerId,
+        DateTimeOffset? since,
+        CancellationToken cancellationToken)
+    {
+        using var client = await ConnectAsync(endpoint, cancellationToken);
+        using var stream = await client.Containers.GetContainerLogsAsync(containerId, new ContainerLogsParameters
+        {
+            ShowStdout = true,
+            ShowStderr = true,
+            Timestamps = true,
+            Tail = "400",
+            Since = since is null ? null : since.Value.ToUnixTimeSeconds().ToString()
         }, cancellationToken);
         var (stdout, stderr) = await stream.ReadOutputToEndAsync(cancellationToken);
         return stdout + stderr;

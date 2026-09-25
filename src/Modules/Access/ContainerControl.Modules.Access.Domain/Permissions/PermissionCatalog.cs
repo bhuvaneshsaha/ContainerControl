@@ -52,7 +52,7 @@ public static class PermissionCatalog
 
         new(PlatformHostsManage, "Manage Docker hosts", "Platform", "Register and update Docker hosts."),
         new(PlatformQuotasManage, "Manage quotas", "Platform", "Set team CPU, memory, and storage quotas."),
-        new(PlatformSettingsManage, "Manage platform settings", "Platform", "Change control-plane settings."),
+        new(PlatformSettingsManage, "Manage platform settings", "Platform", "Change control-plane settings, including alert webhook and mail recipients."),
         new(PlatformCapacityRead, "Read capacity", "Platform", "Read host capacity."),
 
         new(RegistriesRead, "Read registries", "Registries", "View registry connections."),
@@ -65,14 +65,14 @@ public static class PermissionCatalog
         new(SecretsManage, "Manage secrets", "Secrets", "Write secret values for non-production environments."),
         new(SecretsManageProd, "Manage production secrets", "Secrets", "Write secret values for production."),
 
-        new(DeployExecute, "Execute deploys", "Delivery", "Deploy and redeploy an application."),
+        new(DeployExecute, "Execute deploys", "Delivery", "Deploy, redeploy, start a slot beside the live release, swap traffic, or set a canary percent."),
         new(DeployApprove, "Approve deploys", "Delivery", "Accept a deploy that is waiting for approval."),
-        new(DeployRollback, "Roll back deploys", "Delivery", "Restore the last successful desired state."),
+        new(DeployRollback, "Roll back deploys", "Delivery", "Restore the last successful desired state, or send public traffic back to the previous slot."),
 
         new(EdgeCertsManage, "Manage certificates", "Edge", "Upload and replace certificates."),
         new(EdgeDnsManage, "Manage allowed domains", "Edge", "Save domains that applications may claim."),
 
-        new(RuntimeLogsRead, "Read logs", "Runtime", "Read container logs."),
+        new(RuntimeLogsRead, "Read logs", "Runtime", "Read container logs, including lines kept after the Docker daemon rotates them."),
         new(RuntimeStatsRead, "Read stats", "Runtime", "Read CPU and memory stats."),
         new(RuntimeControl, "Control runtime", "Runtime", "Start, stop, and restart services.")
     ];

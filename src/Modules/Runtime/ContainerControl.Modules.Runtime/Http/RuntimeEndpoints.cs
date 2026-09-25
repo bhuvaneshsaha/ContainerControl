@@ -9,6 +9,8 @@ namespace ContainerControl.Modules.Runtime.Http;
 
 public sealed record LogTailResponse(string Text);
 
+public sealed record StoredLogsResponse(IReadOnlyList<StoredLogEntry> Lines);
+
 public sealed record StatsResponse(IReadOnlyList<ServiceStats> Services);
 
 public static class RuntimeEndpoints
@@ -24,6 +26,18 @@ public static class RuntimeEndpoints
             .WithName("ReadAppLogs")
             .WithTags("Runtime")
             .Produces<LogTailResponse>();
+
+        endpoints.MapGet("/apps/{appId:guid}/logs/stored", async (Guid appId, int? take, StoredLogReader logs, CancellationToken cancellationToken) =>
+            {
+                var lines = await logs.ReadAsync(appId, take ?? 200, cancellationToken);
+                return lines is null
+                    ? Results.NotFound()
+                    : Results.Ok(new StoredLogsResponse(lines));
+            })
+            .RequirePermission(PermissionCatalog.RuntimeLogsRead)
+            .WithName("ReadStoredAppLogs")
+            .WithTags("Runtime")
+            .Produces<StoredLogsResponse>();
 
         endpoints.MapGet("/apps/{appId:guid}/stats", async (Guid appId, RuntimeInspector runtime, CancellationToken cancellationToken) =>
             {

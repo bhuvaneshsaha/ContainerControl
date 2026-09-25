@@ -50,4 +50,6 @@ If the Docker host's data root is already an overlay filesystem — a nested VM,
 - Do not put secret values in git, compose files, or PostgreSQL.
 - Do not turn on self-registration or run the Development user seed in production.
 - Do not add Portainer, Keycloak, or a commercial control-panel product.
-- Do not expect Entra ID, Windows container hosts, per-app DNS writes, a long-term log store, auto-scaling, blue/green, canary, alerting, cost dashboards, or a template marketplace. Those are not in this product.
+- Do not expect Entra ID, Windows container hosts, per-app DNS writes, auto-scaling, cost dashboards, or a template marketplace. Those are not in this product.
+- Blue/green is a second slot beside the live release, then a traffic swap. Traefik sends the hostname to a small nginx container, and that container applies a canary percent. One replica remains the default deploy. See [ADR 0017](adr/0017-traefik-slot-swap-and-canary.md).
+- Stored logs outlive Docker daemon rotation. Alerting is a webhook plus optional SMTP. Set `ALERTS_SMTP_HOST`, `ALERTS_SMTP_FROM`, and `ALERTS_SMTP_PASSWORD` on the management host when mail should send. Save the webhook URL and recipients on the Alerts page. Do not put the SMTP password in git.

@@ -17,6 +17,8 @@ public sealed class DeliveryDbContext : DbContext
 
     public DbSet<WorkerLease> Leases => Set<WorkerLease>();
 
+    public DbSet<TrafficSlot> TrafficSlots => Set<TrafficSlot>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasDefaultSchema(DeliveryModule.SchemaName);
@@ -32,6 +34,7 @@ public sealed class DeliveryDbContext : DbContext
             entity.ToTable("deployments");
             entity.HasKey(deployment => deployment.Id);
             entity.Property(deployment => deployment.Status).HasMaxLength(32).IsRequired();
+            entity.Property(deployment => deployment.Mode).HasMaxLength(16).IsRequired();
             entity.Property(deployment => deployment.Error).HasMaxLength(1000);
             entity.Property(deployment => deployment.Hostname).HasMaxLength(253);
             entity.HasIndex(deployment => new { deployment.ApplicationId, deployment.CreatedAtUtc });
@@ -42,6 +45,14 @@ public sealed class DeliveryDbContext : DbContext
             entity.HasKey(lease => new { lease.ApplicationId, lease.Environment });
             entity.Property(lease => lease.Environment).HasMaxLength(16).IsRequired();
             entity.Property<uint>("xmin").HasColumnType("xid").ValueGeneratedOnAddOrUpdate().IsConcurrencyToken();
+        });
+        modelBuilder.Entity<TrafficSlot>(entity =>
+        {
+            entity.ToTable("traffic_slots");
+            entity.HasKey(slot => slot.ApplicationId);
+            entity.Property(slot => slot.LiveSlot).HasMaxLength(16).IsRequired();
+            entity.Property(slot => slot.CandidateSlot).HasMaxLength(16);
+            entity.Property(slot => slot.PreviousSlot).HasMaxLength(16);
         });
     }
 }

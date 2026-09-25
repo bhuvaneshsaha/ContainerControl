@@ -26,6 +26,8 @@ public sealed class EdgeGateway : IEdgeGateway
 
     public string EdgeNetworkName => "edge";
 
+    public bool UseTls => AcmeConfigured();
+
     public async Task<IReadOnlyList<AllowedDomain>> ListAsync(CancellationToken cancellationToken) =>
         await _db.Domains.AsNoTracking().OrderBy(domain => domain.Name).ToListAsync(cancellationToken);
 

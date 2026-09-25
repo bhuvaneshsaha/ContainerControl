@@ -1,0 +1,28 @@
+<div class="mb-4 flex flex-wrap items-baseline gap-3">
+  <h1 class="m-0">Alerts</h1>
+  @if (status() === 'ready' && refreshing()) {
+    <p class="m-0 text-sm text-neutral-600" role="status">Refreshing…</p>
+  }
+</div>
+<p>A failed deploy and a service healthcheck that becomes unhealthy send a webhook and, when SMTP is configured, mail. Secret values are not included.</p>
+@if (status() === 'loading') {
+  <div aria-busy="true">
+    <app-page-state kind="loading" message="Loading alert settings." />
+  </div>
+} @else if (status() === 'error') {
+  <app-page-state kind="error" message="Alert settings could not be loaded." (retry)="load()" />
+} @else {
+  @if (refreshError()) {
+    <app-page-state kind="error" message="Alert settings could not be loaded." (retry)="load()" />
+  }
+  <form class="max-w-xl" [formGroup]="form" (ngSubmit)="save()">
+    <app-text-field label="Webhook URL" inputId="alert-webhook" hint="http or https. Leave blank to stop webhook delivery." formControlName="webhookUrl" />
+    <app-text-field label="Email recipients" inputId="alert-recipients" hint="Comma-separated addresses. Leave blank to stop mail." formControlName="recipients" />
+    @if (smtpConfigured()) {
+      <p>SMTP is configured on the management host. Mail uses those settings. The password is not shown here.</p>
+    } @else {
+      <p>SMTP is not configured. Set ALERTS_SMTP_HOST and ALERTS_SMTP_FROM on the management host before mail is sent.</p>
+    }
+    <button mat-flat-button type="submit" [disabled]="isBusy('save')" [attr.aria-busy]="isBusy('save')">{{ isBusy('save') ? 'Saving…' : 'Save alerts' }}</button>
+  </form>
+}
