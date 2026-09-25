@@ -50,6 +50,8 @@ builder.Services.AddEdgeModule(builder.Configuration);
 builder.Services.AddRuntimeModule(builder.Configuration);
 builder.Services.AddHostedService<DatabaseInitializer>();
 builder.Services.AddHostedService<EcrTokenRefresh>();
+builder.Services.AddHostedService<ContainerControl.Modules.Runtime.Inspection.LogCollector>();
+builder.Services.AddHostedService<ContainerControl.Modules.Runtime.Inspection.ServiceHealthMonitor>();
 builder.Services.AddExceptionHandler<UnhandledExceptionHandler>();
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();

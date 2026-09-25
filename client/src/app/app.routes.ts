@@ -25,6 +25,12 @@ export const routes: Routes = [
         loadComponent: () => import('./pages/hosts/hosts').then((module) => module.Hosts),
       },
       {
+        path: 'alerts',
+        title: 'Alerts',
+        canActivate: [permissionGuard('platform.settings.manage')],
+        loadComponent: () => import('./pages/alerts/alerts').then((module) => module.Alerts),
+      },
+      {
         path: 'capacity',
         title: 'Capacity',
         canActivate: [permissionGuardAny(['platform.quotas.manage', 'platform.capacity.read'])],

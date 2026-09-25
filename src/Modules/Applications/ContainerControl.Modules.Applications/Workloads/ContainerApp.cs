@@ -66,4 +66,7 @@ public interface IWorkloadStore
     Task ReplaceDesiredAsync(Guid id, DesiredState desired, CancellationToken cancellationToken);
 
     Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<WorkloadSnapshot>> ListAllAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<WorkloadSnapshot>>([]);
 }

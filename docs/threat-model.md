@@ -29,7 +29,7 @@ Application hostnames and allowed domains are stored only as DNS names. A pasted
 
 Secret and registry values are written to Infisical. A failed deploy is stored as a short message. Messages that look like an assignment are replaced with a generic sentence. ECR refresh logs the exception type and the registry id.
 
-Live logs use SignalR at `/hubs/logs`. The hub requires `runtime.logs.read` and team membership. The stream is the Engine log API, not a separate log store.
+Live logs use SignalR at `/hubs/logs`. The hub requires `runtime.logs.read` and team membership. The stream is the Engine log API. Stored lines in `runtime.log_lines` use the same permission and team check. Secret values known to the catalog are replaced with `[redacted]` before insert. Alert webhook URLs and recipient addresses are platform settings. The SMTP password is host configuration and is not stored in PostgreSQL. Alert bodies do not include secret values.
 
 ## Decided mitigations
 
@@ -57,4 +57,4 @@ These stay outside the API. [Production setup](production-setup.md) is the check
 
 ## Deferred
 
-Entra ID, Windows container hosts, per-app DNS writes, a long-term log store, auto-scaling, blue/green, canary, alerting, cost dashboards, and a template marketplace are not implemented. A Docker socket proxy and a Traefik file provider are deferred past v1 ([ADR 0016](adr/0016-traefik-websecure-engine-mtls-and-socket.md)). Traefik holding the host socket until then is the accepted residual in that ADR, not an open Critical. The control plane is one management VM. A second Docker host does not receive public traffic by itself.
+Entra ID, Windows container hosts, per-app DNS writes, auto-scaling, cost dashboards, and a template marketplace are not implemented. Blue/green, canary, stored logs, and webhook or SMTP alerts are in place ([ADR 0017](adr/0017-traefik-slot-swap-and-canary.md)). A Docker socket proxy and a Traefik file provider are deferred past v1 ([ADR 0016](adr/0016-traefik-websecure-engine-mtls-and-socket.md)). Traefik holding the host socket until then is the accepted residual in that ADR, not an open Critical. The control plane is one management VM. A second Docker host does not receive public traffic by itself. Slot routing still uses this Traefik. It does not add a second public entry.

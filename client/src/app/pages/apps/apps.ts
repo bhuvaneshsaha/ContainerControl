@@ -26,7 +26,7 @@ import { TextField } from '../../shared/text-field';
 import { composeServiceNames, secretTargetsForSave } from './compose-services';
 
 type AppAction = 'deploy' | 'approve' | 'start' | 'stop' | 'restart' | 'rollback';
-type InspectKind = 'secrets' | 'logs' | 'live' | 'stats';
+type InspectKind = 'secrets' | 'logs' | 'stored' | 'live' | 'stats';
 
 @Component({
   selector: 'app-apps',
@@ -54,6 +54,7 @@ export class Apps {
   private logConnection: HubConnection | null = null;
 
   readonly status = signal<'loading' | 'ready' | 'error'>('loading');
+  readonly canaryPercent = signal(10);
   readonly refreshing = signal(false);
   readonly refreshError = signal(false);
   readonly busy = signal<ReadonlySet<string>>(new Set());
@@ -132,6 +133,8 @@ export class Apps {
         return `Secrets for ${app.name}`;
       case 'logs':
         return `Logs for ${app.name}`;
+      case 'stored':
+        return `Stored logs for ${app.name}`;
       case 'live':
         return `Live logs for ${app.name}`;
       case 'stats':
@@ -561,6 +564,62 @@ export class Apps {
     });
   }
 
+  setCanary(event: Event): void {
+    const value = Number((event.target as HTMLInputElement).value);
+    if (Number.isInteger(value) && value >= 1 && value <= 99) {
+      this.canaryPercent.set(value);
+    }
+  }
+
+  async slotDeploy(app: AppResponse): Promise<void> {
+    const confirmed = await this.confirm.ask({
+      title: `Deploy beside ${app.name}?`,
+      body: `This starts a second copy of ${app.name} next to the live release. Public traffic stays on the live release until you swap or set a canary.`,
+      confirmLabel: 'Deploy beside',
+    });
+    if (!confirmed) {
+      return;
+    }
+
+    await this.postSlot(app, 'slot', 'slots/deploy', {}, `${app.name} is running beside the live release.`);
+  }
+
+  async swapTraffic(app: AppResponse): Promise<void> {
+    const confirmed = await this.confirm.ask({
+      title: `Swap traffic for ${app.name}?`,
+      body: `Public traffic moves to the release waiting beside ${app.name}. The previous release stays running so you can revert.`,
+      confirmLabel: 'Swap traffic',
+    });
+    if (!confirmed) {
+      return;
+    }
+
+    await this.postSlot(app, 'swap', 'slots/swap', {}, `Public traffic for ${app.name} moved to the new release.`);
+  }
+
+  async canary(app: AppResponse): Promise<void> {
+    const percent = this.canaryPercent();
+    if (!Number.isInteger(percent) || percent < 1 || percent > 99) {
+      this.feedback.error('Enter a canary percent from 1 to 99.');
+      return;
+    }
+
+    await this.postSlot(app, 'canary', 'slots/canary', { percent }, `${percent}% of public traffic for ${app.name} goes to the new release.`);
+  }
+
+  async revertTraffic(app: AppResponse): Promise<void> {
+    const confirmed = await this.confirm.ask({
+      title: `Revert traffic for ${app.name}?`,
+      body: `Public traffic goes back to the previous release of ${app.name}. The other release stays running.`,
+      confirmLabel: 'Revert traffic',
+    });
+    if (!confirmed) {
+      return;
+    }
+
+    await this.postSlot(app, 'revert', 'slots/revert', {}, `Public traffic for ${app.name} is back on the previous release.`);
+  }
+
   async stopLive(): Promise<void> {
     await this.stopHub();
   }
@@ -604,6 +663,27 @@ export class Apps {
     });
   }
 
+  async storedLogs(app: AppResponse): Promise<void> {
+    await this.stopHub();
+    this.inspect.set({ appId: app.id, kind: 'stored' });
+    this.detail.set('');
+    await runBusy(this.busy, `stored:${app.id}`, async () => {
+      try {
+        const response = await firstValueFrom(
+          this.http.get<{ lines: { service: string; at: string; text: string }[] }>(
+            `${environment.apiUrl}/apps/${app.id}/logs/stored`,
+          ),
+        );
+        this.detail.set(
+          response.lines.map((line) => `${line.at} ${line.service} ${line.text}`).join('\n') ||
+            'No stored logs yet.',
+        );
+      } catch (error) {
+        this.feedback.error(problemMessage(error, 'Stored logs could not be loaded.'));
+      }
+    });
+  }
+
   async stats(app: AppResponse): Promise<void> {
     await this.stopHub();
     this.inspect.set({ appId: app.id, kind: 'stats' });
@@ -631,6 +711,19 @@ export class Apps {
         control.updateValueAndValidity();
       }
     }
+  }
+
+  private async postSlot(app: AppResponse, key: string, path: string, body: object, success: string): Promise<void> {
+    await runBusy(this.busy, `${key}:${app.id}`, async () => {
+      this.feedback.clear();
+      try {
+        await firstValueFrom(this.http.post(`${environment.apiUrl}/apps/${app.id}/${path}`, body));
+        this.feedback.success(success);
+        await this.load();
+      } catch (error) {
+        this.feedback.error(problemMessage(error, 'The application action could not be completed.'));
+      }
+    });
   }
 
   private async stopHub(): Promise<void> {

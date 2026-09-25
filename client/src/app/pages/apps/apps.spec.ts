@@ -517,4 +517,62 @@ describe('Apps', () => {
     expect(fixture.componentInstance.editing()).toBeNull();
     expect(TestBed.inject(FeedbackService).items()[0].text).toBe('welcome was removed.');
   });
+
+  it('sends a canary percent for the release beside the live one', async () => {
+    const http = TestBed.inject(HttpTestingController);
+    const app: AppResponse = {
+      id: '97f94c8a-3d8e-49ee-9397-2a358eb9a636',
+      teamId: 'team',
+      hostId: 'host',
+      name: 'welcome',
+      environment: 'dev',
+      image: null,
+      status: 'running',
+      hostname: 'web.apps.example.com',
+      exposed: true,
+      requiresApproval: false,
+      allowDatabaseImages: false,
+    };
+    fixture.componentInstance.canaryPercent.set(25);
+
+    const pending = fixture.componentInstance.canary(app);
+    const request = http.expectOne(`${environment.apiUrl}/apps/${app.id}/slots/canary`);
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body).toEqual({ percent: 25 });
+    request.flush({ status: 'running' });
+    await fixture.whenStable();
+    http.expectOne(`${environment.apiUrl}/apps`).flush({ apps: [app] });
+    http.expectOne(`${environment.apiUrl}/access/teams`).flush({ teams: [] });
+    http.expectOne(`${environment.apiUrl}/platform/hosts/choices`).flush({ hosts: [] });
+    await pending;
+
+    expect(TestBed.inject(FeedbackService).items()[0].text).toBe('25% of public traffic for welcome goes to the new release.');
+  });
+
+  it('shows stored log lines for an authorized reader', async () => {
+    const http = TestBed.inject(HttpTestingController);
+    const app: AppResponse = {
+      id: '97f94c8a-3d8e-49ee-9397-2a358eb9a636',
+      teamId: 'team',
+      hostId: 'host',
+      name: 'welcome',
+      environment: 'dev',
+      image: null,
+      status: 'running',
+      hostname: null,
+      exposed: false,
+      requiresApproval: false,
+      allowDatabaseImages: false,
+    };
+
+    const pending = fixture.componentInstance.storedLogs(app);
+    await fixture.whenStable();
+    http.expectOne(`${environment.apiUrl}/apps/${app.id}/logs/stored`).flush({
+      lines: [{ service: 'web', at: '2026-09-25T18:00:00Z', text: 'ready' }],
+    });
+    await pending;
+
+    expect(fixture.componentInstance.detail()).toContain('ready');
+    expect(fixture.componentInstance.detail()).toContain('web');
+  });
 });

@@ -11,6 +11,7 @@
         <a class="rounded px-1 py-0.5 text-neutral-800 no-underline hover:underline" routerLink="/access" routerLinkActive="font-semibold underline underline-offset-4" ariaCurrentWhenActive="page">Access</a>
       }
       <a class="rounded px-1 py-0.5 text-neutral-800 no-underline hover:underline" *appHasPermission="'platform.hosts.manage'" routerLink="/hosts" routerLinkActive="font-semibold underline underline-offset-4" ariaCurrentWhenActive="page">Hosts</a>
+      <a class="rounded px-1 py-0.5 text-neutral-800 no-underline hover:underline" *appHasPermission="'platform.settings.manage'" routerLink="/alerts" routerLinkActive="font-semibold underline underline-offset-4" ariaCurrentWhenActive="page">Alerts</a>
       @if (canOpenCapacity()) {
         <a class="rounded px-1 py-0.5 text-neutral-800 no-underline hover:underline" routerLink="/capacity" routerLinkActive="font-semibold underline underline-offset-4" ariaCurrentWhenActive="page">Capacity</a>
       }

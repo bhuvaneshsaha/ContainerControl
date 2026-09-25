@@ -4,7 +4,31 @@ public sealed record DockerEndpoint(string Address);
 
 public sealed record EngineVersion(string Version, string ApiVersion);
 
-public sealed record EngineContainer(string Id, string Name, bool Running, string? IpAddress);
+public sealed record EngineContainer(
+    string Id,
+    string Name,
+    bool Running,
+    string? IpAddress,
+    IReadOnlyDictionary<string, string>? Labels = null)
+{
+    public string? Label(string key) =>
+        Labels is not null && Labels.TryGetValue(key, out var value) ? value : null;
+}
+
+public static class ManagedLabels
+{
+    public const string Application = "cc.application";
+
+    public const string Service = "cc.service";
+
+    public const string Slot = "cc.slot";
+
+    public const string Role = "cc.role";
+
+    public const string SlotRouterRole = "slot-router";
+
+    public const string RouteSlot = "route";
+}
 
 public sealed record ContainerHealthcheck(
     IReadOnlyList<string> Test,
@@ -67,6 +91,13 @@ public interface IDockerEngine
         string containerId,
         int tail,
         CancellationToken cancellationToken);
+
+    Task<string> ReadTimestampedLogsAsync(
+        DockerEndpoint endpoint,
+        string containerId,
+        DateTimeOffset? since,
+        CancellationToken cancellationToken) =>
+        ReadLogsAsync(endpoint, containerId, 200, cancellationToken);
 
     Task FollowLogsAsync(
         DockerEndpoint endpoint,

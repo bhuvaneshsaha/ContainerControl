@@ -20,6 +20,13 @@ public static class BootstrapAdminConfiguration
         Map(configuration, "EDGE_ACME_EMAIL", "Edge:AcmeEmail");
         Map(configuration, "EDGE_HTTP_PORT", "Edge:HttpPort");
         Map(configuration, "EDGE_HTTPS_PORT", "Edge:HttpsPort");
+        Map(configuration, "ALERTS_SMTP_HOST", "Alerts:Smtp:Host");
+        Map(configuration, "ALERTS_SMTP_PORT", "Alerts:Smtp:Port");
+        Map(configuration, "ALERTS_SMTP_FROM", "Alerts:Smtp:From");
+        Map(configuration, "ALERTS_SMTP_USERNAME", "Alerts:Smtp:Username");
+        Map(configuration, "ALERTS_SMTP_PASSWORD", "Alerts:Smtp:Password");
+        Map(configuration, "ALERTS_SMTP_ENABLE_SSL", "Alerts:Smtp:EnableSsl");
+        Map(configuration, "LOGS_RETENTION_DAYS", "Logs:RetentionDays");
     }
 
     private static void Map(ConfigurationManager configuration, string variable, string key)

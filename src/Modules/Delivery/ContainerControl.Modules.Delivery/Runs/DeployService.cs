@@ -8,6 +8,7 @@ using ContainerControl.Modules.Applications.Workloads;
 using ContainerControl.Modules.Delivery.Compose;
 using ContainerControl.Modules.Delivery.Persistence;
 using ContainerControl.Modules.Edge.Domains;
+using ContainerControl.Modules.Platform.Alerts;
 using ContainerControl.Modules.Platform.Engine;
 using ContainerControl.Modules.Platform.Hosts;
 using ContainerControl.Modules.Platform.Quotas;
@@ -20,7 +21,7 @@ using Microsoft.Extensions.Logging;
 
 namespace ContainerControl.Modules.Delivery.Runs;
 
-public sealed class DeployService
+public sealed partial class DeployService
 {
     private readonly DeliveryDbContext _db;
     private readonly IWorkloadStore _apps;
@@ -36,6 +37,7 @@ public sealed class DeployService
     private readonly IClock _clock;
     private readonly DeployLease _lease;
     private readonly ILogger<DeployService> _logger;
+    private readonly IAlertPublisher _alerts;
 
     public DeployService(
         DeliveryDbContext db,
@@ -51,7 +53,8 @@ public sealed class DeployService
         ICurrentUser currentUser,
         IClock clock,
         DeployLease lease,
-        ILogger<DeployService> logger)
+        ILogger<DeployService> logger,
+        IAlertPublisher? alerts = null)
     {
         _db = db;
         _apps = apps;
@@ -67,6 +70,7 @@ public sealed class DeployService
         _clock = clock;
         _lease = lease;
         _logger = logger;
+        _alerts = alerts ?? SilentAlertPublisher.Instance;
     }
 
     public async Task<DeployOutcome> DeployAsync(
@@ -132,6 +136,24 @@ public sealed class DeployService
         }
 
         return await DeployAsync(applicationId, _currentUser.UserId ?? Guid.Empty, approved: true, cancellationToken);
+    }
+
+    public async Task<DeployOutcome> ApproveAsync(
+        Guid applicationId,
+        Guid actorUserId,
+        CancellationToken cancellationToken)
+    {
+        var latest = await _db.Deployments
+            .AsNoTracking()
+            .Where(item => item.ApplicationId == applicationId)
+            .OrderByDescending(item => item.CreatedAtUtc)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (latest?.Status == "pending-approval" && latest.Mode == TrafficPlan.SlotMode)
+        {
+            return await SlotDeployAsync(applicationId, actorUserId, approved: true, cancellationToken, requireMembership: false);
+        }
+
+        return await DeployAsync(applicationId, actorUserId, approved: true, cancellationToken, requireMembership: false);
     }
 
     public Task<DeployOutcome> ChangePowerAsync(Guid applicationId, string action, CancellationToken cancellationToken) =>
@@ -222,6 +244,7 @@ public sealed class DeployService
 
         await _db.Deployments.Where(item => item.ApplicationId == app.Id).ExecuteDeleteAsync(cancellationToken);
         await _db.Leases.Where(item => item.ApplicationId == app.Id).ExecuteDeleteAsync(cancellationToken);
+        await _db.TrafficSlots.Where(item => item.ApplicationId == app.Id).ExecuteDeleteAsync(cancellationToken);
         var deleted = await _apps.DeleteAsync(app.Id, cancellationToken);
         if (!deleted)
         {
@@ -234,17 +257,63 @@ public sealed class DeployService
 
     private async Task<DeployOutcome> DeployHeldAsync(Guid applicationId, bool approved, CancellationToken cancellationToken)
     {
+        var gate = await GateAsync(applicationId, approved, "replace", countSecondSlot: false, cancellationToken);
+        if (gate.Outcome is not null)
+        {
+            return gate.Outcome;
+        }
+
+        try
+        {
+            await ApplyAsync(gate.App!, gate.Host!.Endpoint, gate.Plan!, gate.AnyExposed, gate.PublicHost, cancellationToken);
+        }
+        catch (SecretAssignmentException exception)
+        {
+            _logger.LogWarning(
+                "Deployment rejected for {ApplicationId}. {Reason}",
+                gate.App!.Id,
+                exception.Message);
+            await RecordAsync(gate.App!, "rejected", exception.Message, cancellationToken);
+            await _apps.SetStatusAsync(gate.App!.Id, "rejected", cancellationToken);
+            return DeployOutcome.Fail(StatusCodes.Status400BadRequest, exception.Message);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            _logger.LogError(
+                "Deployment failed for {ApplicationId}. {ExceptionType}",
+                gate.App!.Id,
+                exception.GetType().Name);
+            var message = DeployFailureText.Describe(exception);
+            await RecordAsync(gate.App!, "failed", message, cancellationToken);
+            await _apps.SetStatusAsync(gate.App!.Id, "failed", cancellationToken);
+            await NotifyAsync(gate.App!, AlertKinds.DeployFailed, message, cancellationToken);
+            return DeployOutcome.Fail(StatusCodes.Status502BadGateway, message);
+        }
+
+        await RecordAsync(gate.App!, "succeeded", null, cancellationToken);
+        await _apps.SetStatusAsync(gate.App!.Id, "running", cancellationToken);
+        return DeployOutcome.Ok("running");
+    }
+
+    private async Task<DeployGate> GateAsync(
+        Guid applicationId,
+        bool approved,
+        string mode,
+        bool countSecondSlot,
+        CancellationToken cancellationToken,
+        bool keepApplicationStatus = false)
+    {
         var app = await _apps.FindAsync(applicationId, cancellationToken);
         if (app is null)
         {
-            return DeployOutcome.NotFound();
+            return DeployGate.Stop(DeployOutcome.NotFound());
         }
 
         if (app.RequiresApproval && !approved)
         {
-            await RecordAsync(app, "pending-approval", null, cancellationToken);
+            await RecordAsync(app, "pending-approval", null, cancellationToken, mode);
             await _apps.SetStatusAsync(app.Id, "pending-approval", cancellationToken);
-            return DeployOutcome.Ok("pending-approval");
+            return DeployGate.Stop(DeployOutcome.Ok("pending-approval"));
         }
 
         var plan = string.IsNullOrWhiteSpace(app.ComposeYaml)
@@ -252,28 +321,46 @@ public sealed class DeployService
             : ComposePolicy.Parse(app.ComposeYaml, app.AllowDatabaseImages);
         if (!plan.Accepted)
         {
-            await RecordAsync(app, "rejected", string.Join(" ", plan.Errors), cancellationToken);
-            await _apps.SetStatusAsync(app.Id, "rejected", cancellationToken);
-            return DeployOutcome.Fail(StatusCodes.Status400BadRequest, string.Join(" ", plan.Errors));
+            await RecordAsync(app, "rejected", string.Join(" ", plan.Errors), cancellationToken, mode);
+            if (!keepApplicationStatus)
+            {
+                await _apps.SetStatusAsync(app.Id, "rejected", cancellationToken);
+            }
+
+            return DeployGate.Stop(DeployOutcome.Fail(StatusCodes.Status400BadRequest, string.Join(" ", plan.Errors)));
         }
 
         var publicHost = PublicHostname.Normalize(app.Hostname);
         var duplicateHostname = ComposePolicy.DuplicatePublicHostname(plan.Services, publicHost);
         if (duplicateHostname is not null)
         {
-            await RecordAsync(app, "rejected", duplicateHostname, cancellationToken);
-            await _apps.SetStatusAsync(app.Id, "rejected", cancellationToken);
-            return DeployOutcome.Fail(StatusCodes.Status400BadRequest, duplicateHostname);
+            await RecordAsync(app, "rejected", duplicateHostname, cancellationToken, mode);
+            if (!keepApplicationStatus)
+            {
+                await _apps.SetStatusAsync(app.Id, "rejected", cancellationToken);
+            }
+
+            return DeployGate.Stop(DeployOutcome.Fail(StatusCodes.Status400BadRequest, duplicateHostname));
+        }
+
+        var resources = plan.Services.Select(service => service.Resources).ToList();
+        if (countSecondSlot)
+        {
+            resources.AddRange(plan.Services.Select(service => service.Resources));
         }
 
         var quotaMessage = QuotaPolicy.Rejection(
             await _quotas.FindAsync(app.TeamId, cancellationToken),
-            plan.Services.Select(service => service.Resources).ToArray());
+            resources);
         if (quotaMessage is not null)
         {
-            await RecordAsync(app, "rejected", quotaMessage, cancellationToken);
-            await _apps.SetStatusAsync(app.Id, "rejected", cancellationToken);
-            return DeployOutcome.Fail(StatusCodes.Status400BadRequest, quotaMessage);
+            await RecordAsync(app, "rejected", quotaMessage, cancellationToken, mode);
+            if (!keepApplicationStatus)
+            {
+                await _apps.SetStatusAsync(app.Id, "rejected", cancellationToken);
+            }
+
+            return DeployGate.Stop(DeployOutcome.Fail(StatusCodes.Status400BadRequest, quotaMessage));
         }
 
         var anyExposed = plan.Services.Any(service => service.Exposed) || (string.IsNullOrWhiteSpace(app.ComposeYaml) && app.Exposed);
@@ -290,47 +377,23 @@ public sealed class DeployService
                 var message = routeHost is null
                     ? "Set a hostname under an allowed domain."
                     : "The hostname '" + routeHost + "' is not under an allowed domain.";
-                await RecordAsync(app, "rejected", message, cancellationToken);
-                await _apps.SetStatusAsync(app.Id, "rejected", cancellationToken);
-                return DeployOutcome.Fail(StatusCodes.Status400BadRequest, message);
+                await RecordAsync(app, "rejected", message, cancellationToken, mode);
+                if (!keepApplicationStatus)
+                {
+                    await _apps.SetStatusAsync(app.Id, "rejected", cancellationToken);
+                }
+
+                return DeployGate.Stop(DeployOutcome.Fail(StatusCodes.Status400BadRequest, message));
             }
         }
 
         var host = await _hosts.FindAsync(app.HostId, cancellationToken);
         if (host is null)
         {
-            return DeployOutcome.Fail(StatusCodes.Status404NotFound, "The Docker host is gone.");
+            return DeployGate.Stop(DeployOutcome.Fail(StatusCodes.Status404NotFound, "The Docker host is gone."));
         }
 
-        try
-        {
-            await ApplyAsync(app, host.Endpoint, plan, anyExposed, publicHost, cancellationToken);
-        }
-        catch (SecretAssignmentException exception)
-        {
-            _logger.LogWarning(
-                "Deployment rejected for {ApplicationId}. {Reason}",
-                app.Id,
-                exception.Message);
-            await RecordAsync(app, "rejected", exception.Message, cancellationToken);
-            await _apps.SetStatusAsync(app.Id, "rejected", cancellationToken);
-            return DeployOutcome.Fail(StatusCodes.Status400BadRequest, exception.Message);
-        }
-        catch (Exception exception) when (exception is not OperationCanceledException)
-        {
-            _logger.LogError(
-                "Deployment failed for {ApplicationId}. {ExceptionType}",
-                app.Id,
-                exception.GetType().Name);
-            var message = DeployFailureText.Describe(exception);
-            await RecordAsync(app, "failed", message, cancellationToken);
-            await _apps.SetStatusAsync(app.Id, "failed", cancellationToken);
-            return DeployOutcome.Fail(StatusCodes.Status502BadGateway, message);
-        }
-
-        await RecordAsync(app, "succeeded", null, cancellationToken);
-        await _apps.SetStatusAsync(app.Id, "running", cancellationToken);
-        return DeployOutcome.Ok("running");
+        return new DeployGate(null, app, plan, publicHost, anyExposed, host);
     }
 
     private async Task ApplyAsync(WorkloadSnapshot app, string endpointAddress, ComposePlan plan, bool anyExposed, string? publicHost, CancellationToken cancellationToken)
@@ -380,6 +443,8 @@ public sealed class DeployService
         {
             await _engine.RemoveContainerAsync(endpoint, container.Id, cancellationToken);
         }
+
+        await ClearSlotStateAsync(app.Id, endpoint, cancellationToken);
 
         var ordered = ComposePolicy.StartOrder(plan.Services);
         foreach (var service in ordered)
@@ -460,7 +525,7 @@ public sealed class DeployService
         }
     }
 
-    private async Task RecordAsync(WorkloadSnapshot app, string status, string? error, CancellationToken cancellationToken)
+    private async Task RecordAsync(WorkloadSnapshot app, string status, string? error, CancellationToken cancellationToken, string mode = "replace")
     {
         _db.Deployments.Add(new DeploymentRecord
         {
@@ -473,10 +538,27 @@ public sealed class DeployService
             Hostname = app.Hostname,
             Exposed = app.Exposed,
             Status = status,
+            Mode = mode,
             Error = error,
             CreatedAtUtc = _clock.UtcNow
         });
         await _db.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task NotifyAsync(WorkloadSnapshot app, string kind, string message, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _alerts.PublishAsync(new AlertNotice(kind, app.Id, app.Name, message), cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            _logger.LogWarning(
+                "Alert {AlertKind} was not sent for {ApplicationId}. {ExceptionType}",
+                kind,
+                app.Id,
+                exception.GetType().Name);
+        }
     }
 
     private async Task ReleaseHeldAsync(Guid applicationId, string environment, Guid ownerId)
@@ -546,16 +628,31 @@ public sealed class DeployService
             }
         }
 
+        await TryRemoveNetworkAsync(endpoint, AppNetwork(applicationId), applicationId);
+        await TryRemoveNetworkAsync(endpoint, TrafficPlan.Network(applicationId, TrafficPlan.Blue), applicationId);
+        await TryRemoveNetworkAsync(endpoint, TrafficPlan.Network(applicationId, TrafficPlan.Green), applicationId);
+    }
+
+    private async Task ClearSlotStateAsync(Guid applicationId, DockerEndpoint endpoint, CancellationToken cancellationToken)
+    {
+        await _db.TrafficSlots.Where(item => item.ApplicationId == applicationId).ExecuteDeleteAsync(cancellationToken);
+        await TryRemoveNetworkAsync(endpoint, TrafficPlan.Network(applicationId, TrafficPlan.Blue), applicationId);
+        await TryRemoveNetworkAsync(endpoint, TrafficPlan.Network(applicationId, TrafficPlan.Green), applicationId);
+    }
+
+    private async Task TryRemoveNetworkAsync(DockerEndpoint endpoint, string name, Guid applicationId)
+    {
         try
         {
-            await _engine.RemoveNetworkAsync(endpoint, AppNetwork(applicationId), cancellationToken);
+            await _engine.RemoveNetworkAsync(endpoint, name, CancellationToken.None);
         }
-        catch (DockerApiException exception) when (exception.StatusCode is HttpStatusCode.Conflict or HttpStatusCode.Forbidden)
+        catch (Exception exception) when (exception is not OperationCanceledException)
         {
             _logger.LogWarning(
-                "Application network {Network} for {ApplicationId} was not removed.",
-                AppNetwork(applicationId),
-                applicationId);
+                "Application network {Network} for {ApplicationId} was not removed. {ExceptionType}",
+                name,
+                applicationId,
+                exception.GetType().Name);
         }
     }
 
@@ -566,6 +663,17 @@ public sealed class DeployService
 
     private static string RouterName(Guid appId, string service) =>
         "cc" + appId.ToString("N")[..12] + service.Replace("-", "");
+}
+
+internal sealed record DeployGate(
+    DeployOutcome? Outcome,
+    WorkloadSnapshot? App,
+    ComposePlan? Plan,
+    string? PublicHost,
+    bool AnyExposed,
+    DockerHostSnapshot? Host)
+{
+    public static DeployGate Stop(DeployOutcome outcome) => new(outcome, null, null, null, false, null);
 }
 
 public sealed record DeployOutcome(bool Succeeded, int StatusCode, string Status, string? Error)

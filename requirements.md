@@ -82,10 +82,10 @@ Working notes from planning a self-service container hosting platform on Windows
 ### Deferred to later phases
 
 - Auto-scaling / multi-replica load balancing
-- Blue/green or canary deployments
-- Built-in alerting (Slack/email on crash/failure)
 - Cost/usage dashboards
 - One-click template marketplace (databases, Redis, etc.)
+
+Blue/green and canary use the existing Traefik route. Stored logs outlive daemon rotation. Alerts are a webhook and optional SMTP when a deploy fails or a service becomes unhealthy.
 
 ## Build approach note
 

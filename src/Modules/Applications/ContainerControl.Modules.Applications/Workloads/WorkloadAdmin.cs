@@ -59,6 +59,12 @@ public sealed class WorkloadAdmin : IWorkloadStore, ISecretCatalog
         return app;
     }
 
+    public async Task<IReadOnlyList<WorkloadSnapshot>> ListAllAsync(CancellationToken cancellationToken)
+    {
+        var apps = await _db.Apps.AsNoTracking().OrderBy(app => app.Name).ToListAsync(cancellationToken);
+        return apps.Select(ToSnapshot).ToArray();
+    }
+
     public async Task<WorkloadSnapshot?> FindAsync(Guid id, CancellationToken cancellationToken)
     {
         var app = await _db.Apps.AsNoTracking().SingleOrDefaultAsync(item => item.Id == id, cancellationToken);

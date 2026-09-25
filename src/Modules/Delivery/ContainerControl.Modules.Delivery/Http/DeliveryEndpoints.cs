@@ -16,6 +16,8 @@ public sealed record DeploymentListResponse(IReadOnlyList<DeploymentResponse> De
 
 public sealed record WebhookDeployRequest(Guid? ApplicationId);
 
+public sealed record CanaryRequest(int? Percent);
+
 public static class DeliveryEndpoints
 {
     public static IEndpointRouteBuilder MapDeliveryEndpoints(this IEndpointRouteBuilder endpoints)
@@ -27,7 +29,7 @@ public static class DeliveryEndpoints
             .WithTags("Delivery");
 
         endpoints.MapPost("/apps/{appId:guid}/approve", async (Guid appId, HttpContext http, DeployService deploy, CancellationToken cancellationToken) =>
-                ToResult(await deploy.DeployAsync(appId, UserId(http), approved: true, cancellationToken, requireMembership: false)))
+                ToResult(await deploy.ApproveAsync(appId, UserId(http), cancellationToken)))
             .RequirePermission(PermissionCatalog.DeployApprove)
             .WithName("ApproveDeploy")
             .WithTags("Delivery");
@@ -64,6 +66,40 @@ public static class DeliveryEndpoints
             .WithName("ListDeployments")
             .WithTags("Delivery")
             .Produces<DeploymentListResponse>();
+
+        endpoints.MapPost("/apps/{appId:guid}/slots/deploy", async (Guid appId, HttpContext http, DeployService deploy, CancellationToken cancellationToken) =>
+                ToResult(await deploy.SlotDeployAsync(appId, UserId(http), approved: false, cancellationToken)))
+            .RequirePermission(PermissionCatalog.DeployExecute)
+            .WithName("DeploySlot")
+            .WithTags("Delivery");
+
+        endpoints.MapPost("/apps/{appId:guid}/slots/swap", async (Guid appId, DeployService deploy, CancellationToken cancellationToken) =>
+                ToResult(await deploy.SwapSlotsAsync(appId, cancellationToken)))
+            .RequirePermission(PermissionCatalog.DeployExecute)
+            .WithName("SwapSlot")
+            .WithTags("Delivery");
+
+        endpoints.MapPost("/apps/{appId:guid}/slots/canary", async (Guid appId, CanaryRequest? request, DeployService deploy, CancellationToken cancellationToken) =>
+                ToResult(await deploy.CanaryAsync(appId, request?.Percent ?? 0, cancellationToken)))
+            .RequirePermission(PermissionCatalog.DeployExecute)
+            .WithName("CanarySlot")
+            .WithTags("Delivery");
+
+        endpoints.MapPost("/apps/{appId:guid}/slots/revert", async (Guid appId, DeployService deploy, CancellationToken cancellationToken) =>
+                ToResult(await deploy.RevertSlotsAsync(appId, cancellationToken)))
+            .RequirePermission(PermissionCatalog.DeployRollback)
+            .WithName("RevertSlot")
+            .WithTags("Delivery");
+
+        endpoints.MapGet("/apps/{appId:guid}/slots", async (Guid appId, DeployService deploy, CancellationToken cancellationToken) =>
+            {
+                var slot = await deploy.ReadSlotAsync(appId, cancellationToken);
+                return slot is null ? Results.NotFound() : Results.Ok(slot);
+            })
+            .RequirePermission(PermissionCatalog.AppsRead)
+            .WithName("ReadSlot")
+            .WithTags("Delivery")
+            .Produces<TrafficSlotView>();
 
         endpoints.MapPost("/delivery/webhook", async (
                 HttpRequest request,

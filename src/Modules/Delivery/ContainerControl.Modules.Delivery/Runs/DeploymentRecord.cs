@@ -20,6 +20,8 @@ public sealed class DeploymentRecord
 
     public string Status { get; set; } = "succeeded";
 
+    public string Mode { get; set; } = "replace";
+
     public string? Error { get; set; }
 
     public DateTimeOffset CreatedAtUtc { get; set; }
